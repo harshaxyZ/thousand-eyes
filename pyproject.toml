@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thousand-eyes"
+version = "0.2.0"
+description = "Thousand Eyes — local self-audit CLI. Evidence-only pivot/leaf graph. No LLMs, no cloud, no invented findings."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+dependencies = [
+    "httpx>=0.27,<0.29",
+    "pyyaml>=6.0,<7.0",
+]
+
+[project.optional-dependencies]
+banner = ["numpy>=1.24"]
+dev = [
+    "pytest==8.3.3",
+    "pytest-asyncio==0.24.0",
+]
+
+[project.scripts]
+thousand-eyes = "thousand_eyes.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+thousand_eyes = ["data/*.yaml"]

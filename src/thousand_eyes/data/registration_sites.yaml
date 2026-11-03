@@ -1,0 +1,33 @@
+# Hand-written registration-leaf definitions.
+#
+# At most 40 consumer sites (mail, music, shopping, gaming, cloud storage).
+# Each entry is a URL template keyed on {value} (the email seed), a
+# "registered" marker that must appear in the response body to call the
+# address registered, and an "absent" marker that must appear to call it
+# unregistered. If both markers match, or neither matches, the site is
+# dropped from output entirely (ambiguous response, not a leaf) -- this is
+# the safety net: a stale or wrong marker just silently drops the site
+# instead of asserting a false leaf.
+#
+# These are leaves only: a confirmed "registered" produces a side-list
+# entry, never a pivot, and is never re-expanded or searched again
+# (hard rule #4).
+#
+# Endpoints drift. Verify a site's markers against a live response before
+# trusting it; delete an entry here (no code change needed) if it goes bad.
+#
+# Deliberately short right now: several commonly-cited "check if email is
+# registered" endpoints (Adobe's accounts API, a guessed Codecademy path)
+# were tried live while building this list and either required a
+# different HTTP method or didn't exist as assumed -- they were cut
+# rather than shipped with a plausible-looking but unverified marker,
+# since an unverified marker is exactly the kind of false positive this
+# tool exists to avoid. Add more sites here once you've confirmed, with a
+# real request, what a registered vs. absent response actually looks like.
+
+sites:
+  - name: Duolingo
+    category: education
+    url_template: "https://www.duolingo.com/2017-06-30/users?email={value}"
+    registered_marker: "\"users\":[{"
+    absent_marker: "\"users\":[]"
