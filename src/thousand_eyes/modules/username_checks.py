@@ -37,7 +37,12 @@ MODULE = "username-sweep"
 DEFAULT_MAX_SITES = 120
 CONCURRENCY = 6
 STAGGER_SECONDS = 0.25
-_PLACEHOLDER_RE = re.compile(r"\{(u|username)\}")
+# WMN v4 schema (verified against wmn-data.json + scripts/checker/wmn_check.py
+# on 2026-11-03): uri templates use {account} (older forks: {u}/{username});
+# e_code/e_string = EXISTS markers (e_string must be PRESENT in the body),
+# m_code/m_string (+legacy f_code/f_string) = MISSING markers.
+_PLACEHOLDER_RE = re.compile(r"\{(account|u|username|user)\}")
+_PLACEHOLDER_TOKEN = "{account}"
 
 
 def _load_sites() -> list[dict]:
@@ -45,31 +50,47 @@ def _load_sites() -> list[dict]:
     return (json.loads(text) or {}).get("sites", [])
 
 
+def _as_list(v) -> list[str]:
+    if v is None:
+        return []
+    if isinstance(v, str):
+        return [v]
+    return [s for s in v if isinstance(s, str)]
+
+
 def _hit_strings(site: dict) -> tuple[list[str], list[str]]:
-    """WMN stores e_string/f_string as a list of strings (newer) or bare
-    string (older); normalise both out of the entry."""
-    def _as_list(v) -> list[str]:
-        if v is None:
-            return []
-        if isinstance(v, str):
-            return [v]
-        return [s for s in v if isinstance(s, str)]
-    return _as_list(site.get("e_string")), _as_list(site.get("f_string"))
+    """All EXISTS markers / all MISSING markers, normalised to lists."""
+    return _as_list(site.get("e_string")), _as_list(site.get("m_string")) + _as_list(site.get("f_string"))
+
+
+def _marker_codes(site: dict) -> tuple[int | None, int | None]:
+    return site.get("e_code"), site.get("m_code") or site.get("f_code")
 
 
 def normalize_placeholder(uri: str) -> str | None:
-    """WMN uris use either {u} or {username}; make it str.format-able by the one token we have."""
-    if not _PLACEHOLDER_RE.search(uri):
-        return uri if "{" not in uri and "}" not in uri else None
-    return _PLACEHOLDER_RE.sub("{username}", uri)
+    """WMN uris use {account} (v4) or {u}/{username} (older forks); map them
+    all to one str.format-able token. Sites with no placeholder are skipped."""
+    if not uri:
+        return None
+    if _PLACEHOLDER_RE.search(uri):
+        return _PLACEHOLDER_RE.sub(_PLACEHOLDER_TOKEN, uri)
+    if "{" not in uri and "}" not in uri:
+        return uri  # no placeholder at all — not usable for a username probe
+    return None
 
 
 async def _check_site(client: httpx.AsyncClient, site: dict, username: str) -> tuple[str, dict | None]:
-    """Returns ("claimed", pivot-dict) | ("unclaimed", None) | ("ambiguous", None) | ("error", None)."""
+    """Returns ("claimed", pivot-dict) | ("unclaimed", None) | ("ambiguous", None) | ("error", None).
+
+    v4 verdict logic (mirrors WMN's own checker):
+      claimed   = status == e_code AND (no e_strings OR at least one e_string in body)
+      unclaimed = status == m-code AND (no m_strings OR at least one m_string in body)
+      ambiguous = anything else -> dropped silently, never a false positive
+    """
     uri = normalize_placeholder(site.get("uri_check", ""))
-    if not uri or "{username}" not in uri:
+    if not uri or _PLACEHOLDER_TOKEN not in uri:
         return "ambiguous", None
-    url = uri.format(username=username)
+    url = uri.replace(_PLACEHOLDER_TOKEN, username)
 
     try:
         resp = await client.get(url)
@@ -77,34 +98,33 @@ async def _check_site(client: httpx.AsyncClient, site: dict, username: str) -> t
         _ = describe_http_error(exc)  # transport-level failure: inconclusive, not a negative
         return "error", None
 
-    e_code = site.get("e_code")
-    f_code = site.get("f_code")
-    e_strings, f_strings = _hit_strings(site)
+    e_code, m_code = _marker_codes(site)
+    e_strings, m_strings = _hit_strings(site)
 
-    body = visible_text(resp.text)
+    body = visible_text(resp.text).lower()
     status = resp.status_code
 
-    claimed = (e_code is not None and status == e_code)
-    if claimed and e_strings:
-        for marker in e_strings:
-            if marker.lower() in body.lower():
-                claimed = False
-                break
-    if not claimed:
-        # fallback not-found interpretation
-        if f_code is not None and status == f_code:
-            return "unclaimed", None
-        if f_strings and any(fs.lower() in body.lower() for fs in f_strings):
-            return "unclaimed", None
-        return "ambiguous", None
+    if e_code is not None and status == e_code:
+        if not e_strings or any(marker.lower() in body for marker in e_strings):
+            # WMN stores uri_pretty = the HUMAN profile URL (the checker uses
+            # it as the "Profile ↗" link). Claim shows the profile page; the
+            # API check URL that proved existence stays as the evidence.
+            pretty = str(site.get("uri_pretty") or "").strip()
+            if pretty and "{" in pretty and "}" in pretty:
+                pretty = _PLACEHOLDER_RE.sub(_PLACEHOLDER_TOKEN, pretty).replace(_PLACEHOLDER_TOKEN, username)
+            return "claimed", {
+                "name": site.get("name", "unknown"),
+                "category": site.get("cat") or site.get("category"),
+                "url": pretty or url,
+                "status": status,
+                "uri_check": url,
+            }
 
-    return "claimed", {
-        "name": site.get("name", "unknown"),
-        "category": site.get("category"),
-        "url": url,
-        "status": status,
-        "uri_check": uri,
-    }
+    if m_code is not None and status == m_code:
+        if not m_strings or any(marker.lower() in body for marker in m_strings):
+            return "unclaimed", None
+
+    return "ambiguous", None
 
 
 async def run(client: httpx.AsyncClient, username: str, *, max_sites: int = DEFAULT_MAX_SITES, all_sites: bool = False) -> dict:
