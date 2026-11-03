@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thousand-eyes"
-version = "0.2.0"
-description = "Thousand Eyes — local self-audit CLI. Evidence-only pivot/leaf graph. No LLMs, no cloud, no invented findings."
+version = "0.3.0"
+description = "Thousand Eyes wildfire — evidence-only OSINT self-audit. One lead in, a spider-web of public proof out. No LLMs, no credential probes, no invented findings."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Proprietary" }
@@ -28,4 +28,4 @@ thousand-eyes = "thousand_eyes.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-thousand_eyes = ["data/*.yaml"]
+thousand_eyes = ["data/*.yaml", "data/*.json"]
