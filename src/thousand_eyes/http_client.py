@@ -17,9 +17,9 @@ def new_client(transport: httpx.AsyncBaseTransport | None = None, url_log_path: 
     full-request-transparency safety check reads exactly that log."""
     hooks = None
     if url_log_path:
-        def _log(request: httpx.Request) -> None:
+        async def _log(request: httpx.Request) -> None:
             with open(url_log_path, "a", encoding="utf-8") as fh:
-                fh.write(request.url.human_repr() + "\n")
+                fh.write(str(request.url) + "\n")
         hooks = {"request": [_log]}
     return httpx.AsyncClient(
         headers={"User-Agent": USER_AGENT},
