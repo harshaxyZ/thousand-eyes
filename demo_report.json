@@ -1,0 +1,308 @@
+{
+  "seed": "demo.subject@example.org, demosubject",
+  "nodes": [
+    {
+      "type": "email",
+      "value": "demo.subject@example.org",
+      "class": "pivot"
+    },
+    {
+      "type": "username",
+      "value": "demosubject",
+      "class": "pivot"
+    },
+    {
+      "type": "name",
+      "value": "Demo Subject",
+      "class": "leaf"
+    },
+    {
+      "type": "url",
+      "value": "https://github.com/demosubject",
+      "class": "pivot"
+    },
+    {
+      "type": "url",
+      "value": "https://twitter.com/demosubject",
+      "class": "pivot"
+    },
+    {
+      "type": "domain",
+      "value": "example.org",
+      "class": "pivot"
+    },
+    {
+      "type": "url",
+      "value": "https://demo.subject.dev",
+      "class": "pivot"
+    },
+    {
+      "type": "url",
+      "value": "https://twitter.com/demosubject/status/123",
+      "class": "pivot"
+    },
+    {
+      "type": "url",
+      "value": "https://www.reddit.com/user/demosubject/",
+      "class": "pivot"
+    },
+    {
+      "type": "url",
+      "value": "https://mastodon.social/@demosubject",
+      "class": "pivot"
+    },
+    {
+      "type": "url",
+      "value": "https://web.archive.org/web/20210407000000/https://github.com/demosubject",
+      "class": "pivot"
+    }
+  ],
+  "edges": [
+    {
+      "from": "demo.subject@example.org",
+      "to": "Demo Subject",
+      "source": "gravatar",
+      "evidence_url": "https://www.gravatar.com/c61396c4e6be321870c8ec1175b7eb50.json",
+      "snippet": "displayName=\"Demo Subject\"",
+      "status": 200
+    },
+    {
+      "from": "demo.subject@example.org",
+      "to": "https://github.com/demosubject",
+      "source": "gravatar",
+      "evidence_url": "https://www.gravatar.com/c61396c4e6be321870c8ec1175b7eb50.json",
+      "snippet": "accounts[].url=\"https://github.com/demosubject\" (shortname=github)",
+      "status": 200
+    },
+    {
+      "from": "demo.subject@example.org",
+      "to": "https://twitter.com/demosubject",
+      "source": "gravatar",
+      "evidence_url": "https://www.gravatar.com/c61396c4e6be321870c8ec1175b7eb50.json",
+      "snippet": "accounts[].url=\"https://twitter.com/demosubject\" (shortname=twitter)",
+      "status": 200
+    },
+    {
+      "from": "demo.subject@example.org",
+      "to": "https://github.com/demosubject",
+      "source": "github-commit-search",
+      "evidence_url": "https://github.com/demo-org/demo-repo/commit/abc123",
+      "snippet": "commit author login=\"demosubject\" for a commit with author-email=\"demo.subject@example.org\"",
+      "status": 200
+    },
+    {
+      "from": "demo.subject@example.org",
+      "to": "example.org",
+      "source": "userrealm",
+      "evidence_url": "https://login.microsoftonline.com/common/userrealm/demo.subject@example.org",
+      "snippet": "userrealm account_type=Managed domain_name=example.org",
+      "status": 200
+    },
+    {
+      "from": "demosubject",
+      "to": "Demo Subject",
+      "source": "github-profile",
+      "evidence_url": "https://api.github.com/users/demosubject",
+      "snippet": "GitHub profile name=\"Demo Subject\"",
+      "status": 200
+    },
+    {
+      "from": "demosubject",
+      "to": "https://demo.subject.dev",
+      "source": "github-profile",
+      "evidence_url": "https://api.github.com/users/demosubject",
+      "snippet": "GitHub profile blog field=\"https://demo.subject.dev\"",
+      "status": 200
+    },
+    {
+      "from": "demosubject",
+      "to": "https://twitter.com/demosubject",
+      "source": "github-profile",
+      "evidence_url": "https://api.github.com/users/demosubject",
+      "snippet": "GitHub profile twitter_username=\"demosubject\"",
+      "status": 200
+    },
+    {
+      "from": "demosubject",
+      "to": "https://twitter.com/demosubject/status/123",
+      "source": "keybase-proofs",
+      "evidence_url": "https://twitter.com/demosubject/status/123",
+      "snippet": "Keybase-signed proof: twitter account \"demosubject\" (sig_id=demo-sig-1)",
+      "status": 200
+    },
+    {
+      "from": "demosubject",
+      "to": "https://www.reddit.com/user/demosubject/",
+      "source": "reddit-user",
+      "evidence_url": "https://www.reddit.com/user/demosubject/about.json",
+      "snippet": "reddit user /u/demosubject, created 2021-03-01, total karma 4212",
+      "status": 200
+    },
+    {
+      "from": "https://github.com/demosubject",
+      "to": "https://mastodon.social/@demosubject",
+      "source": "fetch",
+      "evidence_url": "https://github.com/demosubject",
+      "snippet": "https URL found on page https://github.com/demosubject",
+      "status": 200
+    },
+    {
+      "from": "https://github.com/demosubject",
+      "to": "https://demo.subject.dev",
+      "source": "fetch",
+      "evidence_url": "https://github.com/demosubject",
+      "snippet": "https URL found on page https://github.com/demosubject",
+      "status": 200
+    },
+    {
+      "from": "https://github.com/demosubject",
+      "to": "demo.subject@example.org",
+      "source": "fetch",
+      "evidence_url": "https://github.com/demosubject",
+      "snippet": "email found on page https://github.com/demosubject",
+      "status": 200
+    },
+    {
+      "from": "https://github.com/demosubject",
+      "to": "Demo Subject",
+      "source": "github-profile",
+      "evidence_url": "https://api.github.com/users/demosubject",
+      "snippet": "GitHub profile name=\"Demo Subject\"",
+      "status": 200
+    },
+    {
+      "from": "https://github.com/demosubject",
+      "to": "https://demo.subject.dev",
+      "source": "github-profile",
+      "evidence_url": "https://api.github.com/users/demosubject",
+      "snippet": "GitHub profile blog field=\"https://demo.subject.dev\"",
+      "status": 200
+    },
+    {
+      "from": "https://github.com/demosubject",
+      "to": "https://twitter.com/demosubject",
+      "source": "github-profile",
+      "evidence_url": "https://api.github.com/users/demosubject",
+      "snippet": "GitHub profile twitter_username=\"demosubject\"",
+      "status": 200
+    },
+    {
+      "from": "https://github.com/demosubject",
+      "to": "https://twitter.com/demosubject/status/123",
+      "source": "keybase-proofs",
+      "evidence_url": "https://twitter.com/demosubject/status/123",
+      "snippet": "Keybase-signed proof: twitter account \"demosubject\" (sig_id=demo-sig-1)",
+      "status": 200
+    },
+    {
+      "from": "https://github.com/demosubject",
+      "to": "https://web.archive.org/web/20210407000000/https://github.com/demosubject",
+      "source": "wayback",
+      "evidence_url": "https://web.archive.org/cdx/search/cdx?url=github.com/demosubject",
+      "snippet": "archived snapshot of https://github.com/demosubject (status 200)",
+      "status": 200
+    },
+    {
+      "from": "https://twitter.com/demosubject",
+      "to": "https://web.archive.org/web/20210407000000/https://github.com/demosubject",
+      "source": "wayback",
+      "evidence_url": "https://web.archive.org/cdx/search/cdx?url=twitter.com/demosubject",
+      "snippet": "archived snapshot of https://github.com/demosubject (status 200)",
+      "status": 200
+    },
+    {
+      "from": "https://demo.subject.dev",
+      "to": "https://web.archive.org/web/20210407000000/https://github.com/demosubject",
+      "source": "wayback",
+      "evidence_url": "https://web.archive.org/cdx/search/cdx?url=demo.subject.dev",
+      "snippet": "archived snapshot of https://github.com/demosubject (status 200)",
+      "status": 200
+    },
+    {
+      "from": "https://twitter.com/demosubject/status/123",
+      "to": "https://web.archive.org/web/20210407000000/https://github.com/demosubject",
+      "source": "wayback",
+      "evidence_url": "https://web.archive.org/cdx/search/cdx?url=twitter.com/demosubject/status/123",
+      "snippet": "archived snapshot of https://github.com/demosubject (status 200)",
+      "status": 200
+    },
+    {
+      "from": "https://www.reddit.com/user/demosubject/",
+      "to": "https://web.archive.org/web/20210407000000/https://github.com/demosubject",
+      "source": "wayback",
+      "evidence_url": "https://web.archive.org/cdx/search/cdx?url=www.reddit.com/user/demosubject/",
+      "snippet": "archived snapshot of https://github.com/demosubject (status 200)",
+      "status": 200
+    },
+    {
+      "from": "https://mastodon.social/@demosubject",
+      "to": "demo.subject@example.org",
+      "source": "fetch",
+      "evidence_url": "https://mastodon.social/@demosubject",
+      "snippet": "email found on page https://mastodon.social/@demosubject",
+      "status": 200
+    },
+    {
+      "from": "https://mastodon.social/@demosubject",
+      "to": "https://web.archive.org/web/20210407000000/https://github.com/demosubject",
+      "source": "wayback",
+      "evidence_url": "https://web.archive.org/cdx/search/cdx?url=mastodon.social/%40demosubject",
+      "snippet": "archived snapshot of https://github.com/demosubject (status 200)",
+      "status": 200
+    }
+  ],
+  "leaves": [
+    {
+      "site": "Twitter / X",
+      "url": "https://api.twitter.com/i/users/email_available.json?email=demo.subject%40example.org",
+      "status": 200
+    },
+    {
+      "site": "Collection1 (2019-01-07)",
+      "url": "https://api.xposedornot.com/v1/check-email/demo.subject@example.org",
+      "status": 200
+    },
+    {
+      "site": "DemoLeak (2021-04-01)",
+      "url": "https://api.xposedornot.com/v1/check-email/demo.subject@example.org",
+      "status": 200
+    },
+    {
+      "site": "mail infrastructure: mail.example.org",
+      "url": "https://cloudflare-dns.com/dns-query?name=example.org&type=MX",
+      "status": null
+    },
+    {
+      "site": "mail infrastructure: cert-host.example.org",
+      "url": "https://crt.sh/?q=example.org&output=json",
+      "status": null
+    },
+    {
+      "site": "mail infrastructure: wild.example.org",
+      "url": "https://crt.sh/?q=example.org&output=json",
+      "status": null
+    },
+    {
+      "site": "mail infrastructure: mail.example.org",
+      "url": "https://cloudflare-dns.com/dns-query?name=example.org&type=MX",
+      "status": null
+    },
+    {
+      "site": "mail infrastructure: cert-host.example.org",
+      "url": "https://crt.sh/?q=example.org&output=json",
+      "status": null
+    },
+    {
+      "site": "mail infrastructure: wild.example.org",
+      "url": "https://crt.sh/?q=example.org&output=json",
+      "status": null
+    }
+  ],
+  "errors": [],
+  "skipped": [
+    {
+      "module": "hibp",
+      "reason": "hibp: no HIBP_API_KEY set"
+    }
+  ]
+}

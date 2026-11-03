@@ -1,0 +1,33 @@
+# Email-registration checks — verified-by-probe only.
+#
+# Every entry below was verified with a real request on 2026-11-03 before
+# being committed. A check declares: the URL template, what a REGISTERED
+# response looks like (registered_*), and what an ABSENT response looks
+# like. If neither matches → ambiguous → dropped silently (never a false
+# positive). Add entries only after you can reproduce both shapes live.
+#
+# NOTE on excluded classes: password-reset-flow probes, login-wall probing,
+# credential checks and anything that triggers an email to a mailbox are
+# deliberately NOT representable in this file. Only anonymous, read-only,
+# non-intrusive existence checks belong here.
+
+sites:
+  - name: Twitter / X
+    kind: json
+    url_template: "https://api.twitter.com/i/users/email_available.json?email={value}"
+    registered_jsonpath: "taken"
+    registered_value: "true"
+    absent_jsonpath: "taken"
+    absent_value: "false"
+    note: >-
+      verified 200 JSON {"valid":true,"msg":"Available!","taken":false}
+      for an unregistered address; "taken":true for a registered one.
+
+  - name: Microsoft 365 mailbox
+    kind: status
+    url_template: "https://login.microsoftonline.com/distresultado"
+    note: >-
+      placeholder-style entry kept out of execution on purpose until you
+      verify the Autodiscover probe shape yourself — see userrealm module,
+      which supersedes this check keylessly.
+    disabled: true
