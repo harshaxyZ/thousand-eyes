@@ -1,4 +1,4 @@
-"""TUI tests — chat-first: chit-chat never fires an audit; banner is clean rich text."""
+"""TUI tests — chat-first generic agent; audits fire only on real leads."""
 
 from __future__ import annotations
 
@@ -18,28 +18,33 @@ from thousand_eyes.banner import Scene, frame_to_text  # noqa: E402
 # ------------------------------------------------------------- intent routing
 
 @pytest.mark.parametrize("text,action,lead", [
-    ("yo what's up", "greet", None),
-    ("yo", "greet", None),
-    ("hey", "greet", None),
-    ("what's up", "greet", None),
-    ("how are you", "greet", None),
+    # smalltalk — never an audit
+    ("yo what's up", "chat", None),
+    ("yo", "chat", None),
+    ("hey", "chat", None),
+    ("what's up", "chat", None),
+    ("how are you", "chat", None),
+    ("tell me a joke", "chat", None),
     ("weather today", "chat", None),
     ("data", "chat", None),
-    ("stuff", "chat", None),
-    ("what can you do", "help", None),
-    ("who are you", "help", None),
+    ("what can you do", "chat", None),
+    ("who are you", "chat", None),
     ("status", "chat", None),
     ("findings", "chat", None),
     ("fence", "chat", None),
-    ("harsha1218_", "audit", "harsha1218_"),
-    ("audit harsha1218_", "audit", "harsha1218_"),
+    ("run a full audit on me", "chat", None),
+    ("search the dark web", "chat", None),
+    ("find stuff about me", "chat", None),
+    # real leads — audit fires
+    ("someuser_42", "audit", "someuser_42"),
+    ("audit someuser_42", "audit", "someuser_42"),
     ("scan tammy_faye", "audit", "tammy_faye"),
     ("you@example.com", "audit", "you@example.com"),
     ("audit you@example.com", "audit", "you@example.com"),
     ("check example.com", "audit", "example.com"),
-    ("run a full audit on me", "ask_lead", None),
-    ("search the dark web", "ask_lead", None),
-    ("find stuff about me", "ask_lead", None),
+    # the operator's exact trigger phrasing
+    ("find out what you can using my email - you@example.com", "audit", "you@example.com"),
+    ("find out what you can using my email - someuser_42", "audit", "someuser_42"),
 ])
 def test_route_intent(text, action, lead):
     assert route_intent(text) == (action, lead)
@@ -85,12 +90,15 @@ async def test_chat_greeting_does_not_start_agent():
         inp = app.query_one("#input")
         inp.value = "yo what's up"
         await pilot.press("enter")
-        await pilot.pause(0.5)
-        assert app._busy is False          # no audit started
-        assert app._planner is None        # no planner running
-        # agent answered in chat (canned greeting, no key needed)
+        # let the chat reply land (LLM round trip or canned fallback)
+        for _ in range(20):
+            if not app._busy:
+                break
+            await pilot.pause(0.5)
+        assert app._planner is None        # no audit planner ever ran
+        # agent answered in chat (canned/offline reply, no key needed)
         blob = " ".join(said)
-        assert "agent" in blob and ("yo" in blob.lower() or "thousand-eyes" in blob.lower())
+        assert "agent" in blob
 
 
 @pytest.mark.asyncio
@@ -109,6 +117,23 @@ async def test_chat_needs_no_key_for_canned_topics():
         assert "no .onion" in blob          # fence line
         assert "idle" in blob               # status line
         assert "no evidence rows" in blob   # findings line
+
+
+@pytest.mark.asyncio
+async def test_trigger_phrase_starts_agent():
+    """'find out what you can using my email - …' must arm the pipeline."""
+    app = ThousandEyesApp()
+    async with app.run_test() as pilot:
+        inp = app.query_one("#input")
+        inp.value = "find out what you can using my email - demo.subject@example.org"
+        await pilot.press("enter")
+        await pilot.pause(0.5)
+        assert app._busy is True
+        assert app._subject == ["demo.subject@example.org"]
+        inp.value = "/cancel"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app._planner is not None  # still winding down
 
 
 @pytest.mark.asyncio
