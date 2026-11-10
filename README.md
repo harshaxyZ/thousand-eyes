@@ -1,77 +1,128 @@
-# thousand-eyes 🔥 wildfire edition (v0.3)
+# thousand-eyes 🔥 wildfire edition (v0.4)
 
-One lead in → a spider-web of public evidence out. An evidence-only OSINT
-self-audit CLI: you feed it identifiers you own (email, username, phone,
-URL), it walks every confirmed pivot outwards — accounts, breach existence,
-PGP keys, archives, mail infrastructure — and prints the full graph with
-per-edge proof. Zero AI guessing: **every edge carries a source, an evidence
-URL and the exact matched snippet.**
+One lead in → an impact-ranked evidence dossier out. An OSINT self-audit CLI
+that thinks like an attacker: you feed it identifiers you own (email,
+username, phone, URL), it walks every confirmed pivot outwards — platform
+accounts, breach exposure, PGP keys, archives, darkweb index mentions, mail
+infrastructure — then prints what an attacker could actually DO with it,
+in ranked order, every line carrying live proof.
 
 ```
-pip install -e .            # runtime: httpx + pyyaml only (numpy optional, for the banner)
-thousand-eyes you@example.com janedoe_            # multiple leads, wildfire engine
-thousand-eyes --demo you@example.com                 # offline synthetic replay (venue-safe)
-thousand-eyes you@example.com --depth 3 --wild       # uncensored breadth (opt-in)
-thousand-eyes you@example.com --json report.json --dot graph.dot
-thousand-eyes you@example.com --url-log urls.log     # full outbound-URL transparency
+✜  WEAPONISED — identity keys an attacker starts here
+   ✜ name: …  ·  ✜ second email: …  ·  ✖ stealer-log hits
+▦  ACCOUNTS CONFIRMED — pivot doors into this identity
+   ▦ github.com/...  ·  ▦ twitter.com/...  ·  ✖ Collection1 (2019-01-07)
+·  ambient footprint — archives, infra, index mentions
+counts · manual next-steps · skipped/inconclusive (never faked silent)
 ```
+
+## Install (one command)
+
+```
+pipx install thousand-eyes       # or: pip install thousand-eyes
+```
+
+Dependencies (`httpx`, `pyyaml`, `rich`) install automatically. Nothing
+beyond those three reaches your machine; `numpy` is only used by the optional
+startup banner. Every dependency follows the repo's 3-phase verification gate
+(see `research/dependency-gate-3phase.md`).
+
+## Use
+
+```
+thousand-eyes                               # purple chat TUI — talk to the agent
+thousand-eyes you@example.com                 # polite evidence walk
+thousand-eyes you@example.com --full          # WILDFIRE: full 692-site sweep + derived handles + wider caps
+thousand-eyes janedoe_ --full              # usernames work too (no email needed)
+thousand-eyes you@example.com --json report.json --html report.html --dot graph.dot
+thousand-eyes you@example.com --demo          # offline synthetic replay (venue-safe)
+thousand-eyes you@example.com --url-log urls.log    # full outbound-URL transparency
+thousand-eyes --agent you@example.com         # agentic mode (LLM-planned, see below)
+thousand-eyes --demo --agent you@example.com  # agent mode, offline synthetic replay
+```
+
+- Default mode never invents usernames. `--full` opts into wildfire: bigger
+  reach, punctuation variants of your own local-part, complete WMN stroll
+  (derived handles still get the polite sweep so a full run stays ~3 min).
+- The interactive CONFIRM gate is GONE in v0.4 — scripted runs just work
+  while the consent statement banner stays.
+- Live cockpit: while scanning you get a real progress bar + ETA + streaming
+  ranked findings (rich). Non-tty runs print clean reports only.
+
+### Agent mode (`--agent`)
+
+```
+thousand-eyes --agent you@example.com --json agent.json --html dossier.html
+```
+
+An LLM planner (Google Gemini **flash-lite** — free tier, ~no API key cost)
+picks which fenced tool families to fire each round, audits what's still
+"dark", pivots on discovered leads, and writes the final markdown dossier.
+
+- Key: set `GEMINI_API_KEY`, or save it to `~/.gemini/api-key` (one line).
+  The planner falls back to OpenRouter's free flash-lite tier if
+  `OPENROUTER_API_KEY` is set instead.
+- Fence is unchanged: the LLM *selects* tools; the deterministic SafeClient
+  still executes them. No onion resolution, no auth probing, no breach dumps
+  — the LLM can't bypass any of it.
+- `--agent-budget N` caps LLM calls (default 120); `--model` overrides the
+  model (defaults to `gemini-3.5-flash-lite`).
+- `--demo --agent` replays the synthetic fixture with zero network calls.
+
+The default mode stays exactly as it was: no LLM, no key, no network beyond
+the keyless public endpoints.
 
 ## The wildfire model
 
-Old tool: fixed 8-step pipeline, one seed, depth 2. New tool: a lead-driven
-breadth-first walk — every confirmed finding becomes a new typed LEAD, leads
-keep spawning leads:
-
 | lead type | modules |
 |-----------|---------|
-| email | gravatar, breach-index (HIBP), github-commit-search, email-registration sweep, microsooft userrealm, xposedornot breach-existence, PGP (keys.openpgp.org), duolingo family (registration leaves), domain posture (MX/crt.sh/RDAP), exact-document search |
-| username | WhatsMyName sweep (692-site dataset), github-profile, keybase-proofs, reddit-user |
-| url | fetch + extraction (+github interconnect), wayback CDX |
+| email | gravatar, breach-index (HIBP, keyed), github-commit-search, email-registration sweep, Microsoft userrealm, xposedornot breach-existence, Hudson Rock stealer-log (keyed), PGP (keys.openpgp.org), registration leaves, darkweb index (ahmia), exact-document search, domain posture (DoH/crt.sh/RDAP) |
+| username | WhatsMyName sweep (692-site dataset), github-profile, keybase-proofs, reddit-user, darkweb index |
+| url | fetch + strict extraction (+github interconnect), wayback CDX |
 | phone | exact-document (quoted search) |
 | domain | DoH MX records + certificate transparency + RDAP |
 
-Every module obeys the same evidence law:
+Every confirmed finding becomes a new typed LEAD; leads spawn leads until
+spawn-cap bands close. The graph remains reproducible and quotable:
+`--json` has every edge's source/evidence/snippet; `--html` renders the
+ranked radial graph as a standalone zero-asset file.
 
-- a node exists only because a specific request returned that identifier
-- blocked / ambiguous responses are **inconclusive, never "not found"**
-- usernames are never invented from thin air — they come from: leads you
-  typed, handles real APIs returned, or (opt-in `--wild`) deterministic
-  punctuation variants of your own local-part
+## Impact ranking (the hacker POV)
 
-## Verified keyless sources (live-probed 2026-11-03)
+| glyph | tier | meaning |
+|-------|------|---------|
+| ✜ | weaponised | real names, second emails, phone numbers, stealer-log hits — the keys that unlock people-search, docs, SIM attacks |
+| ▦ | pivot doors | confirmed platform accounts and breach records — profiles an attacker visits to harvest bio/contact/graph |
+| · | ambient | archives, mail infra, darknet index mentions — context, not doorways |
 
-Gravatar profiles · GitHub commit-search + profile APIs · Keybase lookup ·
-Twitter/X email-availability JSON · Microsoft userrealm · XposedOrNot ·
-keys.openpgp.org · Reddit .json (may 403 — reported, never hidden) ·
-Wayback CDX · Cloudflare DoH · crt.sh (flaky → degrade, not crash) ·
-rdap.org · Bing HTML search (browser UA; result-redirect decoding built in) ·
-WhatsMyName dataset (CC-BY-SA 4.0, bundled with attribution).
+Blocked and ambiguous responses stay **inconclusive** — the report shows how
+many sources responded badly and why, never pretending "not found".
 
-Optional keys: `HIBP_API_KEY`, `SERPER_API_KEY` (2,500 free credits — search
-insurance), `BRAVE_API_KEY`, `GITHUB_TOKEN`, `HUDSON_API_KEY`.
-
-## Hard rules (enforced in code, not just docs)
+## Hard rules (enforced in code)
 
 1. Pivots must be confirmed by the response body itself.
 2. No password-reset flows, no credential probing, no login-wall brute.
 3. No broker APIs, no breach-dump pulls — existence checks only.
 4. No spam engines / no fake-account generation.
-5. politeness caps: per-type spawn caps, sweep concurrency 6, one request
-   per site per lead.
-6. `--url-log` writes every outbound URL (audit any run).
-7. Missing keys can never read as a clean bill — they're `skipped` / `error`.
+5. Politeness caps: per-type spawn caps, sweep concurrency + stagger,
+   one request per site per lead, darknet searches capped.
+6. `--url-log` writes every outbound URL (audit any run: a --full sweep ≈ 735
+   requests in ~3.5 min — measured live 2026-11-04).
+7. Missing keys never read as a clean bill — they render as `skipped` rows.
+8. Everything that could go wrong in a demo is a `--demo` run on synthetic
+   fixtures — zero sockets in either direction.
 
-## Demo day
+## Dependency gate (supply-chain defense)
 
-`--demo` replays a **synthetic fictional subject** through the whole engine
-via an in-process MockTransport — zero network, zero privacy risk, full
-graph output. Perfect for projector screenshots. For live self-audit on
-your own identifiers, drop `--demo`.
+Anything new entering the environment passes 3 phases before use —
+provenance (canonical PyPI project + maintainer + license + dependency
+review), sandboxed install (venv-scoped, pinned ranges), smoke + full test
+suite. Protocol + verdicts: `research/dependency-gate-3phase.md`.
 
 ## Tests
 
 ```
-.venv/Scripts/python -m pytest -q     # 33 passed, 1 skipped (numpy-optional banner)
+.venv/Scripts/python -m pytest -q     # 43 passed, 1 skipped (numpy-optional banner)
 ```
 
 ## Attribution
@@ -80,3 +131,6 @@ your own identifiers, drop `--demo`.
 & the OSINT community, CC-BY-SA 4.0; snapshot taken 2026-11-03. Our checking
 engine is independent code; dataset license details in
 `src/thousand_eyes/data/ATTRIBUTION-WhatsMyName.md`.
+
+Darknet mentions come from Ahmia's public clearnet index (one GET per term;
+onions listed there are cited, never contacted).

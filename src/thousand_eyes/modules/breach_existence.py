@@ -52,7 +52,7 @@ async def run(client: httpx.AsyncClient, email: str) -> dict:
             site_label = breach_name
             if isinstance(meta, dict) and meta.get("breach_date"):
                 site_label = f"{breach_name} ({meta['breach_date']})"
-            leaves.append({"site": site_label, "url": url, "status": resp.status_code})
+            leaves.append({"site": site_label, "url": url, "status": resp.status_code, "category": "breach"})
 
     return {"pivots": [], "leaves": leaves, "error": None}
 
@@ -62,7 +62,8 @@ async def run_hudsonrock(client: httpx.AsyncClient, email: str) -> dict:
     invalid key must surface as an error, never as a clean bill (hard rule #7)."""
     key = os.environ.get("HUDSON_API_KEY")
     if not key:
-        return {"pivots": [], "leaves": [], "error": None, "skipped": f"{MODULE}: no HUDSON_API_KEY set"}
+        # NOTE: no MODULE prefix here — _record adds the module label itself
+        return {"pivots": [], "leaves": [], "error": None, "skipped": "no HUDSON_API_KEY set (stealer-log check stays a manual browser step)"}
     url = "https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email"
     try:
         resp = await client.get(url, params={"email": email}, headers={"apikey": key})
@@ -80,9 +81,5 @@ async def run_hudsonrock(client: httpx.AsyncClient, email: str) -> dict:
         for t in tools:
             if not isinstance(t, dict):
                 continue
-            leaves.append({
-                "site": f"stealer log: {t.get('machine_name') or 'unknown host'}",
-                "url": f"{url}?email={email}",
-                "status": resp.status_code,
-            })
+            leaves.append({"site": f"stealer log: {t.get('machine_name') or 'unknown host'}", "url": f"{url}?email={email}", "status": resp.status_code, "category": "stealer"})
     return {"pivots": [], "leaves": leaves, "error": None}

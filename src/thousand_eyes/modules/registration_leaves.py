@@ -28,13 +28,15 @@ def _load_sites() -> list[dict]:
     return parsed.get("sites") or []
 
 
-async def run(client: httpx.AsyncClient, email: str) -> dict:
+async def run(client: httpx.AsyncClient, email: str, *, sink=None) -> dict:
     """Returns {"leaves": [...], "errors": [...]}.
 
-    Each leaf: {"site", "url", "status"}.
+    Each leaf: {"site", "url", "status", "category"}.
     Each error: {"module", "error"}.
     """
     sites = _load_sites()
+    if sink is not None:
+        sink.expect(max(0, len(sites) - 1))
     leaves: list[dict] = []
     errors: list[dict] = []
 
@@ -58,6 +60,8 @@ async def run(client: httpx.AsyncClient, email: str) -> dict:
         except httpx.HTTPError as exc:
             errors.append({"module": f"{MODULE}:{name}", "error": describe_http_error(exc)})
             continue
+        if sink is not None:
+            sink.bump()
 
         body = resp.text
         has_registered = registered_marker in body
@@ -69,7 +73,7 @@ async def run(client: httpx.AsyncClient, email: str) -> dict:
             continue  # neither matched, drop
 
         if has_registered:
-            leaves.append({"site": name, "url": url, "status": resp.status_code})
+            leaves.append({"site": name, "url": url, "status": resp.status_code, "category": site.get("category", "consumer")})
         # absent: not registered, no leaf, nothing to print
 
     return {"leaves": leaves, "errors": errors}
