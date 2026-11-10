@@ -1,12 +1,13 @@
 """thousand-eyes interactive TUI — a chat-first agent console.
 
 Bare `thousand-eyes` opens this: black terminal, the banner up top, a
-streaming chat, a live token pane, a pipeline status line and a one-line
-prompt. It is a GENERAL conversational agent: talk about anything and it
-answers (LLM when a key is present, gracefully offline without one). An
-audit fires ONLY on a real identifier — email, username, domain, url,
-phone — or an explicit ask like "find out what you can using my email -
-x@y.com". Smalltalk never scans anything.
+streaming chat, a live pipeline HUD (progress bar · elapsed · ETA · counts),
+a token pane, a status line and a one-line prompt. It is a GENERAL
+conversational agent scoped to footprint/safety/online-presence: chat about
+anything and it answers (LLM when a key is present, gracefully offline
+without one). An audit fires ONLY on a real identifier — email, username,
+domain, url, phone — or an explicit ask like "find out what you can using my
+email - x@y.com". Smalltalk never scans anything.
 
 Commands:  /demo  /clear  /status  /cancel  /help  /exit
 """
@@ -14,6 +15,7 @@ Commands:  /demo  /clear  /status  /cancel  /help  /exit
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from rich.color import Color
@@ -50,6 +52,8 @@ _LAST_TOKEN_STOP = {
     "about", "into", "over", "under", "once", "here", "there", "is", "are",
     "web", "dark", "deep", "net", "online", "internet", "people", "person",
     "someone", "anyone", "everyone", "him", "her", "them", "us", "you",
+    "email", "e-mail", "phone", "number", "address", "domain", "username",
+    "handle", "url", "link", "site", "account", "name", "id", "profile",
 }
 
 # words that look like handles but are conversation, not leads
@@ -124,7 +128,12 @@ def route_intent(text: str) -> Tuple[str, Optional[str]]:
         toks = s.split()
         last = toks[-1].rstrip(".,);:!?")
         trail = last.rsplit("-", 1)[-1].strip() or last
-        if (_HANDLE_RE.match(trail) and trail.lower() not in _STOP_WORDS
+        # a real handle carries _ or a digit; the only exception is the
+        # terse 'audit someuser' form (2 tokens) where the verb names it
+        looks_like_handle = ("_" in trail or any(c.isdigit() for c in trail)
+                             or len(toks) <= 2)
+        if (looks_like_handle and _HANDLE_RE.match(trail)
+                and trail.lower() not in _STOP_WORDS
                 and trail.lower() not in _LAST_TOKEN_STOP):
             cand, explicit = trail, True
 
@@ -133,6 +142,8 @@ def route_intent(text: str) -> Tuple[str, Optional[str]]:
     if wants and not off_topic and any(k in low for k in
                                        ("email", "username", "handle", "domain",
                                         "phone", "url", "my")):
+        return "ask_lead", None
+    if wants and not off_topic and " on me" in low:
         return "ask_lead", None
     return "chat", None
 
@@ -171,6 +182,11 @@ def _parse_ansi_art(art: str) -> Text:
     return out
 
 
+def _fmt_s(seconds: float) -> str:
+    s = max(0, int(seconds))
+    return f"{s // 60:02d}:{s % 60:02d}"
+
+
 # ------------------------------------------------------------- the app
 
 class ThousandEyesApp(App):
@@ -197,20 +213,40 @@ class ThousandEyesApp(App):
         border: tall #3b1d63;
         padding: 0 1;
         background: #000000;
-        max_height: 8;
+        height: 8;
+        overflow: hidden;
     }
     #chat {
         border: round #3b1d63;
         padding: 0 1;
         background: #08080d;
         color: #e7e5f0;
+        height: 1fr;
+        scrollbar-size-vertical: 0;   # no scrollbar: everything fits on screen
+    }
+    #hud {
+        border: round #241536;
+        background: #000000;
+        padding: 0 1;
+        height: 3;
+    }
+    #bar {
+        height: 1;
+        width: 1fr;
+        margin: 0;
+    }
+    #stats {
+        height: 1;
+        color: #a78bfa;
+        background: #000000;
+        text-style: bold;
     }
     #stream {
         border: round #241536;
         padding: 0 1;
         color: #7c6ba8;
         background: #000000;
-        height: 4;
+        height: 3;
     }
     #status {
         color: #a78bfa;
@@ -245,20 +281,40 @@ class ThousandEyesApp(App):
         self._subject: List[str] = []
         self._last_report = ""
         self._last_ledger: List[dict] = []
+        self._demo = False
+        self._bar_total = 0.0     # seconds-of-work budget for this run
+        self._run_start = 0.0     # monotonic start of current run
 
     # ------------------------------------------------------------- layout
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static(self._banner_text(), id="banner")
+        yield Static("", id="banner")
         yield RichLog(id="chat", auto_scroll=True, markup=True)
+        yield self._hud()
         yield Static("", id="stream", markup=False)
         yield Static("", id="status")
         yield Input(placeholder="chat about anything · or hand me a lead: "
                     "email · username · domain · url · phone", id="input")
         yield Footer()
 
+    def _hud(self):
+        """Progress bar + live stats line, always visible."""
+        from textual.containers import Container
+        from textual.widgets import ProgressBar
+        try:
+            from textual.color import Gradient
+            grad = Gradient.from_stops((0, "#5b21b6"), (1, "#c084fc"))
+        except Exception:  # noqa: BLE001 — decoration, never fatal
+            grad = None
+        bar = ProgressBar(total=0, show_eta=False, show_percentage=False,
+                          gradient=grad, id="bar")
+        stats = Static("fence armed · idle · zero network", id="stats")
+        return Container(bar, stats, id="hud")
+
     def on_mount(self) -> None:
+        self._render_banner()
+        self.set_interval(1.0, self._tick)
         self._say("[bold #a78bfa]THOUSAND EYES[/] v%s — interactive self-audit" % __version__)
         self._say("[#8b7bb0]talk to me about anything. audits fire only when you hand[/]")
         self._say("[#8b7bb0]me a lead — email · username · domain · url · phone.[/]")
@@ -267,14 +323,19 @@ class ThousandEyesApp(App):
         self._set_status("fence armed · waiting for a lead")
         self.query_one("#input", Input).focus()
 
-    def _banner_text(self) -> Text:
+    def _render_banner(self) -> None:
+        """Paint the banner as rich text at the widget's exact width."""
         try:
             from thousand_eyes.banner import Scene, frame_to_text
-            cols = min(self.screen.size.width, 140)
-            sc = Scene(max(cols, 60), eye=True, small=True)
-            return _parse_ansi_art(frame_to_text(sc.final_frame()))
+            w = max(40, self.size.width - 6)          # borders + padding + margin
+            sc = Scene(min(w, 140), eye=True, small=True)
+            art = _parse_ansi_art(frame_to_text(sc.final_frame()))
         except Exception:  # noqa: BLE001 — banner is decoration, never fatal
-            return Text("THOUSAND EYES", style="bold #a78bfa")
+            art = Text("THOUSAND EYES", style="bold #a78bfa")
+        self.query_one("#banner", Static).update(art)
+
+    def on_resize(self, event) -> None:
+        self._render_banner()
 
     # ------------------------------------------------------------- output
 
@@ -286,6 +347,52 @@ class ThousandEyesApp(App):
 
     def _set_status(self, text: str) -> None:
         self.query_one("#status", Static).update(text)
+
+    # ------------------------------------------------------------- HUD
+
+    def _tick(self) -> None:
+        """1s heartbeat: keep elapsed/ETA/progress live while a run is in flight."""
+        if self._planner is not None:
+            self._hud_live()
+
+    def _hud_live(self) -> None:
+        """Time-based bar (honest ETA by mode) + live counters from the ledger."""
+        a = self._planner.analytics.summary() if self._planner else {}
+        wall = time.monotonic() - self._run_start
+        total = self._bar_total or 1.0
+        self.query_one("#bar").update(total=total, progress=min(wall, total))
+        eta = max(0.0, total - wall)
+        stats = (f"t+{_fmt_s(wall)} · eta ~{_fmt_s(eta)}"
+                 + f" · tools {a.get('tool_calls', 0)}"
+                 + f" · ledger {self._ledger_rows()} rows"
+                 + f" · sites {a.get('sites_claimed', 0)}"
+                 + f" · breaches {a.get('breaches', 0)}"
+                 + f" · pivots {a.get('pivots', 0)}"
+                 + f" · {a.get('tok_per_s', 0)} tok/s"
+                 + f" · working {_fmt_s(wall)} of ~{_fmt_s(total)}")
+        if a.get("rate_limit_events"):
+            stats += f" · rate-limits {a.get('rate_limit_events')}"
+        self.query_one("#stats").update(stats)
+
+    def _ledger_rows(self) -> int:
+        pl = self._planner
+        return len(pl.ledger) if pl is not None else len(self._last_ledger)
+
+    def _hud_idle(self) -> None:
+        self.query_one("#bar").update(total=0, progress=0)
+        self.query_one("#stats").update("fence armed · idle · zero network")
+
+    def _hud_done(self, a: Dict[str, Any]) -> None:
+        wall = time.monotonic() - self._run_start
+        if self._bar_total > 0:
+            self.query_one("#bar").update(total=self._bar_total,
+                                          progress=self._bar_total)
+        self.query_one("#stats").update(
+            f"done in {_fmt_s(wall)} · {a.get('tool_calls', 0)} tool calls · "
+            f"{a.get('pivots', 0)} pivots · {a.get('sites_claimed', 0)} sites · "
+            f"{a.get('breaches', 0)} breaches · ledger {self._ledger_rows()} rows"
+            + (f" · rate-limits {a.get('rate_limit_events')}"
+               if a.get("rate_limit_events") else ""))
 
     # ------------------------------------------------------------- input
 
@@ -333,10 +440,9 @@ class ThousandEyesApp(App):
                 self._start_agent(["demo.subject@example.org"], demo=True)
         elif name == "status":
             subj = " · ".join(self._subject) if self._subject else "none"
-            rows = (len(self._planner.ledger) if self._planner is not None
-                    else len(self._last_ledger))
             self._agent_say(esc(f"model {self.model} · budget {self.budget} calls · "
-                                f"busy={self._busy} · subject {subj} · ledger {rows} rows"))
+                                f"busy={self._busy} · subject {subj} · "
+                                f"ledger {self._ledger_rows()} rows"))
         elif name == "cancel":
             if self._planner is not None:
                 self._planner.stop()
@@ -432,8 +538,6 @@ class ThousandEyesApp(App):
             return ("fence: no .onion resolution · no auth probing · no form submission · "
                     "no password tests · no breach dumps · per-domain 300ms bucket · "
                     "global concurrency 8 · planner executes, model selects")
-        if low.strip() in ("help", "commands", "menu") or "what can you do" in low:
-            return None          # /help text is printed by _help(); fall through to LLM
         return None
 
     # ------------------------------------------------------------- agent
@@ -441,6 +545,10 @@ class ThousandEyesApp(App):
     def _start_agent(self, leads: List[str], demo: bool = False) -> None:
         self._busy = True
         self._stream = ""
+        self._demo = demo
+        self._run_start = time.monotonic()
+        # honest ETA: demo replay is seconds, live sweep is minutes
+        self._bar_total = 45.0 if demo else 180.0
         self.query_one("#stream", Static).update("")
         self._set_status(f"waking agent ({self.model})…")
         self.run_worker(self._agent_run(leads, demo), exclusive=True)
@@ -469,8 +577,10 @@ class ThousandEyesApp(App):
             self._agent_say(esc(f"auditing {' · '.join(leads)} — fenced, read-only, evidence-only"))
             report = await planner.run(leads)
         except RuntimeError as exc:
+            self._hud_idle()
             self._agent_say(f"[red]{esc(str(exc))}[/]")
         except Exception as exc:  # noqa: BLE001 — never crash the TUI
+            self._hud_idle()
             self._agent_say(f"[red]{type(exc).__name__}: {esc(str(exc))}[/]")
         else:
             if report:
@@ -491,7 +601,10 @@ class ThousandEyesApp(App):
         kind, data = ev
         if kind == "llm":
             self._stream += data.get("chunk", "")
-            self.query_one("#stream", Static).update(self._stream[-4000:])
+            self.query_one("#stream", Static).update(self._stream[-3000:])
+        elif kind == "ready":
+            self._hud_live()
+            self._set_status(f"fence armed · {data.get('tools')} tools · model {self.model}")
         elif kind == "round":
             self._set_status(f"pipeline: depth {data.get('depth')} · "
                              f"{data.get('tools')} tools fired · ledger {data.get('ledger')} rows")
@@ -501,12 +614,11 @@ class ThousandEyesApp(App):
         elif kind == "audit":
             picked = data.get("picked") or []
             self._set_status(f"self-audit → next families: {', '.join(picked) if picked else '(coverage good)'}")
-        elif kind == "ready":
-            self._set_status(f"fence armed · {data.get('tools')} tools · model {self.model}")
         elif kind == "budget":
             self._set_status("budget cap hit — stopping")
         elif kind == "done":
             a = data.get("analytics", {})
+            self._hud_done(a)
             self._set_status(f"done: {a.get('tool_calls', 0)} tool calls · "
                              f"{a.get('pivots', 0)} pivots · {a.get('llm_calls', 0)} llm calls")
 

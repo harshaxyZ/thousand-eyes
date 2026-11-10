@@ -30,7 +30,7 @@ startup banner. Every dependency follows the repo's 3-phase verification gate
 ## Use
 
 ```
-thousand-eyes                               # purple chat TUI — talk to the agent
+thousand-eyes                               # violet chat console + live HUD
 thousand-eyes you@example.com                 # polite evidence walk
 thousand-eyes you@example.com --full          # WILDFIRE: full 692-site sweep + derived handles + wider caps
 thousand-eyes janedoe_ --full              # usernames work too (no email needed)
