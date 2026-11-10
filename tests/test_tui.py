@@ -32,7 +32,7 @@ from thousand_eyes.banner import Scene, frame_to_text  # noqa: E402
     ("status", "chat", None),
     ("findings", "chat", None),
     ("fence", "chat", None),
-    ("run a full audit on me", "chat", None),
+    ("run a full audit on me", "ask_lead", None),
     ("search the dark web", "chat", None),
     ("find stuff about me", "chat", None),
     # real leads — audit fires
@@ -45,6 +45,16 @@ from thousand_eyes.banner import Scene, frame_to_text  # noqa: E402
     # the operator's exact trigger phrasing
     ("find out what you can using my email - you@example.com", "audit", "you@example.com"),
     ("find out what you can using my email - someuser_42", "audit", "someuser_42"),
+    # audit asks without a lead must never fire a scan
+    ("scan my email", "ask_lead", None),
+    ("find out about my email", "ask_lead", None),
+    ("audit on me", "ask_lead", None),
+    ("look up my username", "ask_lead", None),
+    ("run an audit on me", "ask_lead", None),
+    ("what is my exposure", "ask_lead", None),
+    # terse verb + handle form still works
+    ("audit someuser_42", "audit", "someuser_42"),
+    ("deep dive someuser_9", "audit", "someuser_9"),
 ])
 def test_route_intent(text, action, lead):
     assert route_intent(text) == (action, lead)
@@ -134,6 +144,38 @@ async def test_trigger_phrase_starts_agent():
         await pilot.press("enter")
         await pilot.pause()
         assert app._planner is not None  # still winding down
+
+
+@pytest.mark.asyncio
+async def test_hud_visible_progress_bar_and_stats():
+    """The pipeline HUD must be on screen: bar + stats, zero scrollbar."""
+    app = ThousandEyesApp()
+    async with app.run_test() as pilot:
+        hud = app.query_one("#hud")
+        bar = app.query_one("#bar")
+        stats = app.query_one("#stats")
+        assert hud is not None and bar is not None and stats is not None
+        assert "idle" in stats.renderable.lower()
+        assert app.query_one("#chat").styles.scrollbar_size_vertical == 0
+        # a run drives the bar + stats live (elapsed · eta · tools · ledger)
+        inp = app.query_one("#input")
+        inp.value = "/demo"
+        await pilot.press("enter")
+        await pilot.pause(1.0)
+        assert app._busy is True
+        app._tick()                       # force a HUD heartbeat
+        live = stats.renderable.lower()
+        assert "t+" in live and "eta" in live and "tools" in live
+        assert "working" in live                      # elapsed-of-total line
+        assert app._bar_total > 0         # bar has an honest time budget
+        inp.value = "/cancel"
+        await pilot.press("enter")
+        for _ in range(40):
+            if not app._busy:
+                break
+            await pilot.pause(0.5)
+        assert app._busy is False
+        assert app._planner is None
 
 
 @pytest.mark.asyncio
