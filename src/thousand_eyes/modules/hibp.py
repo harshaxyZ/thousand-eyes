@@ -66,6 +66,6 @@ async def run(client: httpx.AsyncClient, email: str) -> dict:
                 "status": resp.status_code,
             })
         else:
-            leaves.append({"site": f"{name} ({date})", "url": url, "status": resp.status_code})
+            leaves.append({"site": f"{name} ({date})", "url": url, "status": resp.status_code, "category": "breach"})
 
     return {"pivots": pivots, "leaves": leaves, "error": None, "skipped": None}

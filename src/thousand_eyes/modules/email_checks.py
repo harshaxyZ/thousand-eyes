@@ -59,16 +59,17 @@ def _parse_template_value(expected: str):
         return expected
 
 
-async def run(client: httpx.AsyncClient, email: str) -> dict:
+async def run(client: httpx.AsyncClient, email: str, *, sink=None) -> dict:
     """Returns {"leaves": [...], "errors": [...], "checked": int}."""
     sites = _load_sites()
+    active = [s for s in sites if not s.get("disabled")]
+    if sink is not None:
+        sink.expect(max(0, len(active) - 1))
     leaves: list[dict] = []
     errors: list[dict] = []
     checked = 0
 
-    for site in sites:
-        if site.get("disabled"):
-            continue
+    for site in active:
         kind = site.get("kind")
         url_template = site.get("url_template", "")
         if kind not in ("json", "status", "body") or "{value}" not in url_template:
@@ -85,6 +86,8 @@ async def run(client: httpx.AsyncClient, email: str) -> dict:
         except httpx.HTTPError as exc:
             errors.append({"module": f"{MODULE}:{site.get('name', '?')}", "error": describe_http_error(exc)})
             continue
+        if sink is not None:
+            sink.bump()
 
         checked += 1
         registered = False
@@ -116,6 +119,6 @@ async def run(client: httpx.AsyncClient, email: str) -> dict:
             continue  # neither matched → drop silently
 
         if registered:
-            leaves.append({"site": site.get("name", "unknown"), "url": url, "status": resp.status_code})
+            leaves.append({"site": site.get("name", "unknown"), "url": url, "status": resp.status_code, "category": site.get("category", "consumer")})
 
     return {"leaves": leaves, "errors": errors, "checked": checked}

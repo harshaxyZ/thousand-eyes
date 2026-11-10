@@ -127,7 +127,7 @@ async def _check_site(client: httpx.AsyncClient, site: dict, username: str) -> t
     return "ambiguous", None
 
 
-async def run(client: httpx.AsyncClient, username: str, *, max_sites: int = DEFAULT_MAX_SITES, all_sites: bool = False) -> dict:
+async def run(client: httpx.AsyncClient, username: str, *, max_sites: int = DEFAULT_MAX_SITES, all_sites: bool = False, sink=None) -> dict:
     """Returns {"pivots": [...], "errors": [...], "checked": int}."""
     sites = _load_sites()
     # stable shuffle keyed by username so sweep order differs per user but is reproducible
@@ -136,6 +136,11 @@ async def run(client: httpx.AsyncClient, username: str, *, max_sites: int = DEFA
     rng.shuffle(shuffled)
     if not all_sites:
         shuffled = shuffled[:max_sites]
+
+    # live-progress plumbing: announce planned size once, tick per site.
+    # The engine does NOT auto-bump for this module (_SELF_TALLYING_MODULES).
+    if sink is not None:
+        sink.expect(max(0, len(shuffled) - 1))
 
     import asyncio
     sem = asyncio.Semaphore(CONCURRENCY)
@@ -150,6 +155,8 @@ async def run(client: httpx.AsyncClient, username: str, *, max_sites: int = DEFA
         async with sem:
             await asyncio.sleep((index % 8) * STAGGER_SECONDS)  # cheap global pacing
             verdict, payload = await _check_site(client, site, username)
+            if sink is not None:
+                sink.bump()
             if verdict != "error":
                 checked += 1
             if verdict == "claimed" and payload:
@@ -164,6 +171,7 @@ async def run(client: httpx.AsyncClient, username: str, *, max_sites: int = DEFA
                     ),
                     "status": payload["status"],
                     "site": payload["name"],
+                    "category": payload["category"] or "",
                 })
             elif verdict == "error":
                 errors.append({"module": f"{MODULE}:{site.get('name', '?')}", "error": "request failed (timeout / connection)"})

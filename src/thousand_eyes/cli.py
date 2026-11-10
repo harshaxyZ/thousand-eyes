@@ -1,14 +1,18 @@
-"""thousand-eyes — wild-fire self-audit CLI (v0.3).
+"""thousand-eyes — wildfire self-audit CLI (v0.5).
 
-Evidence-only lead-driven pivot graph. No LLM, no breach dumps, no credential
-probes. Only scan identifiers you own or are explicitly authorized to review.
+Impact-ranked, evidence-only lead-driven pivot graph. Default mode is LLM-free
+and keyless; `--agent` adds an LLM-planned pipeline (Gemini flash-lite, free
+tier) on top of the same fenced tools. No breach dumps, no credential probes,
+no password-reset flows. Uses only keyless, read-only, first-party public
+endpoints by default.
 
 Usage:
-    thousand-eyes you@example.com
-    thousand-eyes you@example.com harsha1218_ harsha1218   # multiple leads
-    thousand-eyes you@example.com --depth 3 --wild         # wildfire spread
-    thousand-eyes you@example.com --json report.json --dot graph.dot
-    thousand-eyes --demo you@example.com                   # offline synthetic replay
+    thousand-eyes                               # purple chat TUI (interactive agent)
+    thousand-eyes you@example.com                 # polite sweep
+    thousand-eyes you@example.com --full          # wildfire: caps + full WMN sweep + derived handles
+    thousand-eyes --agent you@example.com         # agentic: LLM-planned batches + markdown dossier
+    thousand-eyes --demo you@example.com          # offline synthetic replay (venue-safe)
+    thousand-eyes you@example.com --json r.json --html r.html
 """
 
 from __future__ import annotations
@@ -16,100 +20,179 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-import threading
 
+from thousand_eyes import __version__
 from thousand_eyes.banner import show_banner
+from thousand_eyes.html_report import render_html
+from thousand_eyes.live import make_sink  # noqa: F401 (documented external knob)
 from thousand_eyes.normalise import InvalidSeed, normalise_seed
 from thousand_eyes.output import render_dot, render_json, render_text
 from thousand_eyes.scan import run_scan
 
 DISCLAIMER = """\
-thousand-eyes v0.3 — public-data self-audit (wildfire edition)
-  * reads only PUBLIC, first-party endpoints (gravatar, github, twitter
-    availability, microsoft userrealm, xposedornot, keys.openpgp.org,
-    web.archive.org, reddit .json, crt.sh/DNS, bing html, WMN dataset)
-  * for identifiers you own or have consent to scan
-  * no password-reset probing, no credential checking, no broker APIs,
-    no breach dumps — excluded in code, not just in docs
-  * leaves: snapshots in time; outbound IP is visible to those platforms
-"""
-
-PERMISSION_GATE = """\
-=== PERMISSION GATE ================================================
-Type CONFIRM to certify ONE of the following, or anything else to cancel:
- 1) every identifier above belongs to me; or
- 2) I have the owner's documented consent for this scan.
-Be honest here: scanning third parties is your responsibility, not ours.
-====================================================================
+thousand-eyes v{v} — public-data self-audit (wildfire edition)
+  * reads only PUBLIC, keyless, first-party endpoints (gravatar, github,
+    twitter availability, microsoft userrealm, xposedornot, keys.openpgp,
+    web.archive, python, reddit .json, crt.sh/DNS, bing html, ahmia index,
+    WhatsMyName dataset)
+  * built for identifiers you own or have the owner's consent to scan —
+    scanning third parties stays your responsibility
+  * no password-reset probing, no credential checks, no breach dumps,
+    no broker APIs, no following .onion links — enforced in code
 """
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="thousand-eyes",
-        description="Wildfire self-audit CLI — feeds one lead into a spider-web of public evidence.",
-        epilog="Self-audit only: scan identifiers you own or are authorized to review.",
+        description="Wildfire self-audit CLI — one lead in, an evidence-ranked web of public proof out.",
+        epilog="Self-audit: scan identifiers you own or are authorized to review.",
     )
-    parser.add_argument("targets", nargs="+", help="one or more leads: email, E.164 phone, https URL, or username")
+    parser.add_argument("targets", nargs="*", help="one or more leads: email, E.164 phone, https URL, or username")
+    parser.add_argument("--full", action="store_true",
+                        help="wildfire mode: wider spawn caps + full 692-site WMN sweep + derived local-part handles")
     parser.add_argument("--json", metavar="PATH", help="write the full report as JSON")
+    parser.add_argument("--html", metavar="PATH", help="write a standalone one-file HTML dossier (renders the graph)")
     parser.add_argument("--dot", metavar="PATH", help="write a Graphviz .dot file")
     parser.add_argument("--fold-plus", action="store_true", help="strip +tag from email local-parts before scanning")
     parser.add_argument("--depth", type=int, default=3, help="how deep spawned leads are chased (default 3)")
-    parser.add_argument("--wild", action="store_true", help="uncensored breadth: local-part username permutations + full sweep caps")
-    parser.add_argument("--all-sites", action="store_true", help="username sweep runs the whole WMN dataset (692 sites), not the politeness cap")
+    parser.add_argument("--no-banner", action="store_true", help="skip the animated startup banner + live cockpit")
+    parser.add_argument("--verbose", "-v", action="store_true", help="print the full evidence dump after the ranking")
+    parser.add_argument("--demo", action="store_true", help="offline synthetic replay (venue-safe; fictional subject + your seeds)")
     parser.add_argument("--url-log", metavar="PATH", help="append every outbound request URL to this file (transparency check)")
-    parser.add_argument("--demo", action="store_true", help="offline synthetic replay (venue-safe; uses a fictional subject + your seeds)")
-    parser.add_argument("--yes", action="store_true", help="skip the interactive permission gate (scripted runs)")
-    parser.add_argument("--no-banner", action="store_true", help="skip the animated startup banner")
+    parser.add_argument("--agent", action="store_true",
+                        help="agentic mode: LLM-planned tool batches + evidence ledger + markdown dossier "
+                             "(Gemini flash-lite via GEMINI_API_KEY, free tier)")
+    parser.add_argument("--model", default=None,
+                        help="agent mode: model id (default gemini-3.5-flash-lite; flash-lite = free tier)")
+    parser.add_argument("--agent-budget", type=int, default=120,
+                        help="agent mode: max LLM calls (default 120)")
     return parser
 
 
-def print_banner() -> None:
-    if sys.stdout.isatty():
-        show_banner(loops=1)
+def _run_agent(args: argparse.Namespace, transport=None) -> int:
+    """Agentic self-audit: LLM-planned batches, evidence ledger, markdown dossier."""
+    import time
 
+    from thousand_eyes.agent import Planner, client_for
 
-def _scan_with_banner(run_kwargs: dict, no_banner: bool):
-    """Runs the scan (worker thread + banner like before) and returns the result."""
-    if no_banner or not sys.stdout.isatty():
-        return asyncio.run(run_scan(**run_kwargs))
-
-    done = threading.Event()
-    outcome: dict[str, object] = {}
-
-    def work() -> None:
-        try:
-            outcome["result"] = asyncio.run(run_scan(**run_kwargs))
-        except BaseException as exc:
-            outcome["error"] = exc
-        finally:
-            done.set()
-
-    threading.Thread(target=work, name="thousand-eyes-scan", daemon=True).start()
-    show_banner(until=done.is_set)
-    done.wait()
-    if "error" in outcome:
-        raise outcome["error"]
-    return outcome["result"]
-
-
-def _gate(targets: list[str], demo: bool, yes: bool) -> bool:
-    if demo or yes or not sys.stdin.isatty():
-        return True
-    print(PERMISSION_GATE)
     try:
-        answer = input("> ").strip().upper()
-    except (EOFError, KeyboardInterrupt):
-        return False
-    return answer == "CONFIRM"
+        llm = client_for(args.model)
+    except RuntimeError as exc:
+        print(f"thousand-eyes agent: {exc}", file=sys.stderr)
+        return 2
+
+    leads = []
+    for raw in args.targets:
+        try:
+            seed = normalise_seed(raw)
+        except InvalidSeed as exc:
+            print(f"thousand-eyes agent: {exc}", file=sys.stderr)
+            return 2
+        leads.append(seed.value)
+
+    async def show(ev):  # mirror planner events onto stderr / live cockpit
+        kind, data = ev
+        if kind == "round":
+            print(f"agent: depth {data.get('depth')} — {data.get('tools')} tools, "
+                  f"ledger {data.get('ledger')} rows", file=sys.stderr)
+        elif kind == "tool":
+            print(f"tool: {data.get('name')} ok={data.get('ok')}", file=sys.stderr)
+        elif kind == "audit":
+            print(f"audit: next families {data.get('picked')}", file=sys.stderr)
+        elif kind in ("start", "ready"):
+            print(f"agent: {kind} {data}", file=sys.stderr)
+        elif kind in ("llm", "report", "done", "budget"):
+            pass  # streaming text + final report are printed at the end
+        else:
+            print(f"agent: {kind} {data}", file=sys.stderr)
+
+    planner = Planner(llm, handlers=[show], goal="", budget_calls=args.agent_budget,
+                      transport=transport)
+
+    sink = None
+    if not args.no_banner:
+        try:
+            from thousand_eyes.live import RichSink
+            sink = RichSink()
+        except Exception:
+            sink = None
+
+    start = time.monotonic()
+    try:
+        if sink is not None:
+            with sink:
+                report = asyncio.run(planner.run(leads))
+        else:
+            report = asyncio.run(planner.run(leads))
+    except RuntimeError as exc:  # rate limit, key rejected, network
+        print(f"thousand-eyes agent: LLM error: {exc}", file=sys.stderr)
+        return 3
+    finally:
+        asyncio.run(planner.close())
+    wall = time.monotonic() - start
+
+    if args.demo:
+        report = "*** DEMO MODE — SYNTHETIC fixture replay, zero network calls ***\n\n" + report
+    print(report)
+    if args.json:
+        import json as _json
+        with open(args.json, "w", encoding="utf-8") as fh:
+            _json.dump({"version": __version__, "mode": "agent", "wall_s": round(wall, 2),
+                        "analytics": planner.analytics.summary(),
+                        "report_md": report, "evidence": planner.ledger},
+                       fh, indent=1)
+        print(f"\nfull agent report written to {args.json}", file=sys.stderr)
+    if args.html:
+        from thousand_eyes.html_report import render_html
+        with open(args.html, "w", encoding="utf-8") as fh:
+            fh.write(render_html({"report_text": report}, version=__version__))
+        print(f"dossier written to {args.html}", file=sys.stderr)
+    return 0
+
+
+def print_banner() -> None:
+    """Play the intro once and stamp the version line — tty only. In
+    non-tty runs (pipes/CI) print_banner prints NOTHING; the ranked report
+    itself carries 'THOUSAND EYES vX' in its header anyway."""
+    if not sys.stdout.isatty():
+        return
+    try:
+        show_banner(loops=1)
+    except Exception:
+        print("\x1b[1;38;2;200;64;255mTHOUSAND EYES\x1b[0m")
+    purple = "\x1b[1;38;2;204;66;255m"
+    ghost = "\x1b[38;2;140;92;252m"
+    reset = "\x1b[0m"
+    print(f"{purple}✦ thousand-eyes\x1b[0m {ghost}v{__version__} · evidence-only wildfire · no LLMs · no credential probes{reset}")
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to cp1252 and choke on the ranked-report
+    # glyphs — force utf-8 with a lenient error handler so output never dies.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     parser = build_parser()
     args_list = sys.argv[1:] if argv is None else list(argv)
-    if not args_list or any(a in ("-h", "--help") for a in args_list):
-        print(DISCLAIMER)
+    if any(a in ("-h", "--help") for a in args_list):
+        print(DISCLAIMER.format(v=__version__))
     args = parser.parse_args(args_list)
+
+    # bare `thousand-eyes` — the purple chat TUI
+    if not args.targets and not any(
+            a in args_list for a in ("--agent", "--demo", "--json", "--html", "--dot",
+                                     "--url-log", "--help", "-h")):
+        from thousand_eyes.tui import ThousandEyesApp
+        return ThousandEyesApp(model=args.model, budget=args.agent_budget).run()
+
+    if not args.targets:  # flags without leads can't run
+        print("thousand-eyes: error: the following arguments are required: targets",
+              file=sys.stderr)
+        return 2
 
     errors: list[str] = []
     for target in args.targets:
@@ -122,45 +205,71 @@ def main(argv: list[str] | None = None) -> int:
             print(f"thousand-eyes: {e}", file=sys.stderr)
         return 2
 
-    if not _gate(list(args.targets), args.demo, args.yes):
-        print("cancelled.", file=sys.stderr)
-        return 2
+    is_tty = sys.stdout.isatty() and not args.no_banner
 
-    if not args.no_banner:
+    if is_tty:
         print_banner()
 
-    if args.demo:
-        from thousand_eyes.demo import demo_transport
-        transport = demo_transport()
-    else:
-        transport = None
+    from thousand_eyes.demo import demo_transport
+    transport = demo_transport() if args.demo else None
 
-    result = _scan_with_banner(
-        dict(
-            raw_seeds=list(args.targets),
-            fold_plus=args.fold_plus,
-            max_depth=max(0, args.depth),
-            wild=args.wild,
-            all_sites=args.all_sites or args.wild,
-            transport=transport,
-            url_log=args.url_log,
-        ),
-        no_banner=False,
-    )
+    if args.agent:
+        return _run_agent(args, transport)
 
-    text = render_text(result)
+    wild = args.full
+    sink = None
+    try:
+        if is_tty:
+            from thousand_eyes.live import RichSink
+            try:
+                sink = RichSink()
+            except Exception:
+                sink = None
+        text = None
+        if sink is not None:
+            with sink:
+                result_obj = asyncio.run(run_scan(
+                    raw_seeds=list(args.targets),
+                    fold_plus=args.fold_plus,
+                    max_depth=max(0, args.depth),
+                    wild=wild,
+                    all_sites=wild,
+                    transport=transport,
+                    url_log=args.url_log,
+                    sink=sink,
+                ))
+        else:
+            result_obj = asyncio.run(run_scan(
+                raw_seeds=list(args.targets),
+                fold_plus=args.fold_plus,
+                max_depth=max(0, args.depth),
+                wild=wild,
+                all_sites=wild,
+                transport=transport,
+                url_log=args.url_log,
+            ))
+    except Exception as exc:  # never show a bare traceback to a user mid-demo
+        print(f"scan failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
+    text = render_text(result_obj, verbose=args.verbose, version=__version__)
     if args.demo:
         text = "*** DEMO MODE — SYNTHETIC fixture replay, zero network calls ***\n\n" + text
     print(text)
 
     if args.json:
         with open(args.json, "w", encoding="utf-8") as fh:
-            fh.write(render_json(result) if not args.demo else render_json(result))
+            fh.write(render_json(result_obj))
         print(f"\nfull report written to {args.json}")
+
+    if args.html:
+        with open(args.html, "w", encoding="utf-8") as fh:
+            fh.write(render_html(result_obj, version=__version__))
+        print(f"dossier written to {args.html}")
 
     if args.dot:
         with open(args.dot, "w", encoding="utf-8") as fh:
-            fh.write(render_dot(result))
+            fh.write(render_dot(result_obj))
         print(f"graph written to {args.dot}")
 
     return 0

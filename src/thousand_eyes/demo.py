@@ -151,6 +151,18 @@ def demo_transport() -> httpx.MockTransport:
         if url.host == "www.duolingo.com" and url.path.startswith("/2017-06-30/users"):
             return httpx.Response(200, json={"users": []})
 
+        if url.host == "ahmia.fi" and url.path == "/search/":
+            return _pitch(
+                '<html><body><ol class="searchResults">'
+                '<li class="result">'
+                "<h4><a href='/search/redirect?redirect_url=http://behindgardeghwsx3.onion/misc/demoleak'>"
+                "archive dump thread mentioning demo data</a></h4>"
+                "<p>demo fixture row (synthetic, fictional)</p>"
+                "<cite>behindgardeghwsx3.onion</cite>"
+                '<span class="lastSeen" data-timestamp="Nov. 2, 2026, 4:49 a.m.">1 day</span>'
+                "</li></ol></body></html>"
+            )
+
         # every unknown route behaves like "nothing here" — ambiguous, dropped
         return httpx.Response(404, text="")
 
