@@ -77,6 +77,7 @@ class Planner:
         self.budget_calls = budget_calls
         self._transport = transport
         self._own_client = None
+        self.fast = False          # set by run(fast=…); read by the audit loop
 
     # ------------------------------------------------------------- plumbing
 
@@ -119,9 +120,15 @@ class Planner:
 
     # --------------------------------------------------------------- rounds
 
-    async def run(self, leads: List[str], goal: str = "") -> str:
-        """Execute the full pipeline; returns the final markdown report."""
+    async def run(self, leads: List[str], goal: str = "", fast: bool = False) -> str:
+        """Execute the full pipeline; returns the final markdown report.
+
+        fast=True skips the per-round LLM self-audit (and its token cost)
+        and uses one short synthesis pass — same tools, same evidence,
+        ~half the wall clock. The TUI runs fast by default.
+        """
         self.goal = goal or self.goal
+        self.fast = fast
         self.analytics.t_start = _time.monotonic()
         self._stop = False
         await self.emit("start", {"leads": leads, "goal": self.goal})
@@ -144,7 +151,16 @@ class Planner:
                         arg = ARGMAP.get(tname, "email")
                         batch.append((tool, {arg: lead}))
             # ---- self-audit: ask the LLM what's still dark
-            audit = await self._audit(frontier, depth)
+            if self.fast:
+                # fast mode: no LLM round-trip — every family in the round
+                # fires once, in registry order. Same evidence, half the wait.
+                audit = []
+                await self.emit("step", {"label": f"round {depth}: firing "
+                                     f"{len(batch)} tools (fast mode)"})
+            else:
+                audit = await self._audit(frontier, depth)
+                await self.emit("step", {"label": f"self-audit picked "
+                                     f"{len(audit)} extra tool(s)"})
             for tname in audit:
                 tool = self.tools.get(tname)
                 if tool and tname not in seen_tools:
@@ -196,7 +212,8 @@ class Planner:
                                            "elapsed": round(self.analytics.elapsed_s(), 1)})
                 break
 
-        report = await self._synthesize(leads, self.goal)
+        await self.emit("step", {"label": "synthesizing the report"})
+        report = await self._synthesize(leads, self.goal, fast=self.fast)
         await self.emit("report", {"len": len(report)})
         await self.emit("done", {"analytics": self.analytics.summary()})
         await self.close()
@@ -211,6 +228,10 @@ class Planner:
                 self.analytics.tool_errors += 1
             self.analytics.fetches += 1
             self.analytics.bytes_scraped += len(res.summary) + 40 * len(res.findings)
+            await self.emit("step", {"label": f"{tool.name} → "
+                                 f"{'ok' if res.ok else 'inconclusive'} "
+                                 f"· {res.ms:.0f}ms · {len(res.findings)} "
+                                 f"finding(s)"})
             await self.emit("tool", {"name": tool.name, "ok": res.ok,
                                      "ms": round(res.ms, 1), "n": len(res.findings),
                                      "summary": res.summary[:120]})
@@ -275,8 +296,10 @@ class Planner:
 
     # ------------------------------------------------------------ synthesis
 
-    async def _synthesize(self, leads: List[str], goal: str) -> str:
-        ledger = self.ledger[:300]
+    async def _synthesize(self, leads: List[str], goal: str,
+                          fast: bool = False) -> str:
+        # fast mode: a short cap keeps the synthesis call cheap and quick.
+        ledger = self.ledger[:60] if fast else self.ledger[:300]
         digest = "\n".join(
             f"- {r.get('kind')} | {r.get('value')} | via {r.get('source') or r.get('tool')} "
             f"| {r.get('evidence_url')} | {str(r.get('snippet'))[:160]}"

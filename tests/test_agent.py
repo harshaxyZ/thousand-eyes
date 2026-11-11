@@ -15,7 +15,7 @@ import pytest
 
 from thousand_eyes.agent import Planner, classify, tools_for, count_tools
 from thousand_eyes.agent.analytics import Analytics
-from thousand_eyes.agent.providers import LLMClient
+from thousand_eyes.agent.providers import GeminiClient as LLMClient
 from thousand_eyes.demo import demo_transport
 
 
