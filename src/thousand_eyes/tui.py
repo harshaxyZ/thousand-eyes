@@ -117,7 +117,7 @@ Footer { background: black; color: white; }
     height: 3;
 }
 #status {
-    color: white;
+    color: #777777;
     background: #0a0a0a;
     padding: 0 1;
     height: 1;
@@ -127,8 +127,11 @@ Footer { background: black; color: white; }
     background: #0a0a0a;
     color: white;
 }
+#input:focus {
+    border: tall #7c3aed;
+}
 #input > .input--placeholder {
-    color: #666666;
+    color: #555555;
 }
 """
 
@@ -162,6 +165,27 @@ _STEP_LABEL = {
     "stop": "stopped by operator",
     "err": "run error",
 }
+
+
+def await_cmd(command: str, timeout: float = 15.0) -> str:
+    """Run one read-only shell command; operator sees exactly what ran."""
+    import shlex
+    import subprocess
+    argv = shlex.split(command)
+    if not argv:
+        return "(empty command)"
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True,
+                              timeout=timeout)
+    except FileNotFoundError:
+        return f"(not found: {argv[0]})"
+    except subprocess.TimeoutExpired:
+        return f"(timed out after {timeout:.0f}s: {command})"
+    out = (proc.stdout or "").strip()
+    err = (proc.stderr or "").strip()
+    body = out or err or "(no output)"
+    tail = "\n…" if len(body) > 1200 else ""
+    return f"$ {command}\n{body[:1200]}{tail}"
 
 
 def route_intent(text: str) -> Tuple[str, Optional[str]]:
@@ -275,6 +299,9 @@ class ThousandEyesApp(App):
 
     CSS = CSS
 
+    # redraw-on-idle only; the banner owns its own timer
+    ENABLE_LIVE_REGION = False
+
     BINDINGS = [
         Binding("ctrl+q", "quit", "quit"),
         Binding("ctrl+c", "quit", "quit"),
@@ -355,8 +382,9 @@ class ThousandEyesApp(App):
             pass
 
     def _user_line(self, text: str) -> None:
-        self._chat_line(f"[bold white]┌─[ YOU ]────────────────────────────"
-                        f"──────────────┐[/]\n[white]{text}[/]\n"
+        stamp = time.strftime("%H:%M:%S")
+        self._chat_line(f"[bold white]┌─[ YOU · {stamp} ]"
+                        f"──────────────────────────┐[/]\n[white]{text}[/]\n"
                         f"[bold white]└────────────────────────────────"
                         f"────────────────┘[/]")
 
@@ -463,6 +491,7 @@ class ThousandEyesApp(App):
             self.action_help()
         elif cmd in ("/exit", "/quit"):
             self.action_exit()
+            self.exit()
         else:
             self._agent_line(f"unknown command: {cmd} — /help for the list")
 
@@ -524,7 +553,13 @@ class ThousandEyesApp(App):
 
     def _local_intent(self, text: str) -> Optional[str]:
         """Operator dashboard words — answered locally, instantly, no LLM."""
-        low = text.lower()
+        s = text.strip()
+        low = s.lower()
+        # read-only shell-out: !git status / !pip show thousand-eyes / …
+        if s.startswith("!") and len(s) > 1:
+            return await_cmd(s[1:])
+        if s.startswith("/"):
+            return self._command(s)
         if any(k in low for k in ("finding", "findings", "evidence", "results",
                                   "what did you", "what have you")):
             rows = self._last_ledger[-5:]
