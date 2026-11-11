@@ -416,8 +416,8 @@ class ThousandEyesApp(App):
         """Operator dashboard line: model, budget, last-run numbers."""
         a = self._planner.analytics if self._planner else None
         if a is None:
-            return (f"idle · model {self.model} · budget {self.budget} calls · "
-                    f"no run in flight")
+            return (f"idle · model {self._live_model()} · budget "
+                    f"{self.budget} calls · no run in flight")
         return (f"running · model {self.model} · wall {_fmt_s(a.elapsed_s())} · "
                 f"tools {a.tool_calls} · tok {a.prompt_tokens + a.completion_tokens} · "
                 f"fetch {a.fetches} · breaches {a.breaches}")
@@ -515,7 +515,9 @@ class ThousandEyesApp(App):
         try:
             async for chunk, _stats in llm.chat(msgs):
                 out += chunk
-                self._stream_line(out[-90:].replace("\n", " "))
+                self._stream_line(
+                    f"{self._live_model()} typing… "
+                    + out[-70:].replace("\n", " "))
         except Exception as e:
             self._agent_line(f"llm error: {e}")
             return
@@ -584,6 +586,13 @@ class ThousandEyesApp(App):
                     "no password tests · no breach dumps · per-domain 300ms bucket · "
                     "global concurrency 8 · planner executes, model selects")
         return None
+
+    def _live_model(self) -> str:
+        """The model that will actually answer — provider-aware, cheap."""
+        client = self._chat_client()
+        if client is not None:
+            return getattr(client, "model", self.model) or self.model
+        return self.model
 
     def _chat_client(self):
         if self._llm is None:
@@ -681,7 +690,7 @@ class ThousandEyesApp(App):
         stats = self.query_one("#stats")
         if planner is None:
             bar.update(progress=100)
-            stats.update("idle · model " + self.model)
+            stats.update("idle · model " + self._live_model())
             return
         a: Analytics = planner.analytics
         elapsed = time.monotonic() - self._run_start
