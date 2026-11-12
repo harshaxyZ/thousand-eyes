@@ -104,6 +104,33 @@ def test_cli_setup_flag_uses_the_guided_flow(monkeypatch):
     assert called.get("ran") is True
 
 
+# ------------------------------------------------------------------ doctor
+
+def test_doctor_runs_and_reports_every_section(capsys, monkeypatch):
+    from thousand_eyes import doctor
+
+    async def fake_probe(client, name, url):
+        return True, "status 200 (1ms)"
+
+    monkeypatch.setattr(doctor, "_probe", fake_probe)
+    assert doctor.run_doctor() == 0
+    out = capsys.readouterr().out
+    for section in ("runtime", "install", "intelligence", "network"):
+        assert section in out
+    assert "source" not in out  # sanity: the doctor is not a scan
+    assert "ready" in out
+
+
+def test_cli_doctor_flag_exits_zero(monkeypatch):
+    from thousand_eyes import cli, doctor
+
+    async def fake_probe(client, name, url):
+        return False, "status 500 (1ms)"
+
+    monkeypatch.setattr(doctor, "_probe", fake_probe)
+    assert cli.main(["--doctor"]) == 0
+
+
 # ------------------------------------------------------------------ report
 
 def _username_result() -> ScanResult:

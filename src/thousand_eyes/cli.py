@@ -70,6 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skill", metavar="ACTION", choices=("install", "uninstall", "status"),
                         help="install/uninstall this CLI as an IDE-agent skill "
                              "(writes ~/.claude/skills/thousand-eyes)")
+    parser.add_argument("--doctor", action="store_true",
+                        help="check this machine: runtime, deps, LLM key, IDE skill "
+                             "and endpoint reachability")
     return parser
 
 
@@ -190,6 +193,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.setup:
         from thousand_eyes.setup import prompt_key
         return prompt_key()
+    if args.doctor:
+        from thousand_eyes.doctor import run_doctor
+        return run_doctor()
     if args.skill:
         from thousand_eyes.skill import install_skill, skill_status, uninstall_skill
         if args.skill == "install":
