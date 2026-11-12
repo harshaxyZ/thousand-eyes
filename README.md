@@ -8,6 +8,10 @@
   <img src="readme_banner.gif" alt="thousand-eyes reactive banner: the eye tracks the cursor, glare sweeps the letters">
 </p>
 
+<p align="center">
+  <img src="docs/banner.png" alt="thousand-eyes banner screenshot: pixel eye + faceted title, rendered live from the Scene frame arrays">
+</p>
+
 <p align="center"><b>OPEN-SOURCE INTELLIGENCE · SEE EVERYTHING. MISS NOTHING.</b></p>
 
 An OSINT self-audit CLI that thinks like an attacker: you feed it identifiers
