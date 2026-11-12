@@ -8,7 +8,26 @@ version = "0.6.0"
 description = "Thousand Eyes wildfire - evidence-only OSINT self-audit. One lead in, an impact-ranked web of public proof out. Default mode is LLM-free; --agent adds an LLM planner behind the same fence. No credential probes, no invented findings."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Proprietary" }
+license = { text = "MIT" }
+authors = [{ name = "janedoe" }]
+keywords = ["osint", "self-audit", "footprint", "privacy", "recon", "whatsmyname"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+]
+[project.urls]
+Homepage = "https://github.com/harshaxyZ/thousand-eyes"
+Changelog = "https://github.com/harshaxyZ/thousand-eyes/blob/main/CHANGELOG.md"
+Issues = "https://github.com/harshaxyZ/thousand-eyes/issues"
 dependencies = [
     "httpx>=0.27,<0.29",
     "pyyaml>=6.0,<7.0",
