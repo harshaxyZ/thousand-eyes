@@ -43,7 +43,17 @@ def _key(*names: str) -> str:
 
 
 def discover_key() -> Tuple[str, str]:
-    """Return (provider, key). Anthropic first, then Gemini, then key files."""
+    """Return (provider, key). Order: the /setup config file (the user's
+    explicit choice), then env vars (anthropic, then gemini), then the
+    legacy key files."""
+    cfg = os.path.expanduser("~/.thousand-eyes/config.json")
+    try:
+        with open(cfg, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and data.get("key"):
+            return str(data.get("provider") or "gemini"), str(data["key"])
+    except (OSError, ValueError):
+        pass
     for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_KEY", "CLAUDE_API_KEY"):
         if os.getenv(var):
             return "anthropic", os.environ[var]
@@ -81,8 +91,8 @@ def client_for(model: Optional[str] = None) -> _BaseLLM:
     if provider == "gemini":
         return GeminiClient(key, GEMINI_FLASH_LITE)
     raise RuntimeError(
-        "no LLM key found: set ANTHROPIC_API_KEY (claude) or GEMINI_API_KEY "
-        "(free tier) - without one, use --demo for the offline replay")
+        "no LLM key found: run `thousand-eyes --setup` (or /setup in the "
+        "TUI) to add one - chat still works offline without it")
 
 
 # ------------------------------------------------------------------ claude
