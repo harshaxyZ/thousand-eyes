@@ -70,6 +70,17 @@ def test_banner_parses_to_clean_rich_text():
 
 # ------------------------------------------------------------- pilot behaviour
 
+def test_banner_direct_render_from_frame_arrays():
+    """_banner_text builds the Text straight from the Scene arrays: no ANSI
+    round-trip, truecolor per cell, every row of the scene present."""
+    app = ThousandEyesApp()
+    t = app._banner_text()
+    assert "\x1b" not in t.plain                      # no escape garbage
+    assert any(ch in t.plain for ch in "▆▊▎")         # block-glyph gradient kept
+    assert "O P E N" in t.plain                       # tagline row is real text
+    assert len(t.plain.splitlines()) >= 6             # art rows + taglines
+
+
 @pytest.mark.asyncio
 async def test_tui_composes_banner_chat_input():
     app = ThousandEyesApp()
