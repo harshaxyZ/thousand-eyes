@@ -94,7 +94,7 @@ CSS = """
 Screen { background: black; }
 Header { background: black; color: white; }
 Footer { background: black; color: white; }
-#banner { background: black; height: 10; padding: 0 0; }
+#banner { background: black; height: auto; padding: 0 0; }
 #chat {
     border: round #2a2a2a;
     padding: 0 1;
@@ -349,7 +349,7 @@ class ThousandEyesApp(App):
     # ------------------------------------------------------------- lifecycle
 
     def on_mount(self) -> None:
-        self.query_one("#banner").update(_parse_ansi_art(self._banner_art()))
+        self.query_one("#banner").update(self._banner_text())
         self._print_welcome()
         self._status("ready · chat about anything, or hand me a lead")
         self._refresh_hud()
@@ -360,11 +360,30 @@ class ThousandEyesApp(App):
         """HUD heartbeat: refresh bar + stats twice a second while running."""
         self._refresh_hud()
 
-    def _banner_art(self) -> str:
-        from thousand_eyes.banner import Scene, frame_to_text
+    def _banner_text(self):
+        """The reactive banner, rendered straight from the Scene's frame arrays.
+
+        No ANSI round-trip: every cell keeps its exact truecolor style, so the
+        TUI shows the same crisp art as `thousand-eyes --banner` in a terminal.
+        """
+        from thousand_eyes.banner import Scene
+
         cols = max(40, self.console.width - 2)
         scene = Scene(cols)
-        return frame_to_text(scene.final_frame())
+        ch, fgi, bgi, bgd = scene.final_frame()
+        out = Text()
+        for r in range(ch.shape[0]):
+            for c in range(ch.shape[1]):
+                glyph = str(ch[r, c])
+                style = None
+                if not bgd[r, c]:
+                    style = Style(color=Color.from_rgb(*[int(v) for v in fgi[r, c]]),
+                                  bgcolor=Color.from_rgb(*[int(v) for v in bgi[r, c]]))
+                elif glyph != " ":
+                    style = Style(color=Color.from_rgb(*[int(v) for v in fgi[r, c]]))
+                out.append(glyph, style=style)
+            out.append("\n")
+        return out
 
     def _print_welcome(self) -> None:
         self._agent_line(f"thousand-eyes v{__version__} — online")
