@@ -1,0 +1,22 @@
+{
+  "name": "thousand-eyes",
+  "version": "0.5.5",
+  "description": "OSINT self-audit \u2014 one lead in, an impact-ranked evidence dossier out. Evidence-only, fenced, no invented findings.",
+  "license": "Proprietary",
+  "bin": {
+    "thousand-eyes": "./bin/thousand-eyes.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "keywords": [
+    "osint",
+    "privacy",
+    "self-audit",
+    "opsec",
+    "breach"
+  ]
+}
