@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.1 (2026-11-12)
+
+- Pipeline upscale: three new keyless username modules - GitLab (REST users
+  API), Mastodon (mastodon.social account lookup) and Bluesky (public
+  AppView getProfile) - wired into the username sweep and the agent tool
+  registry, with fixture tests for confirm/silence paths.
+- TUI chat rebuilt: it is now a general chat on footprint, breaches,
+  brokers, phishing and opsec. A real LLM key gets used first when present;
+  otherwise a local knowledge engine answers properly (rotating phrasing,
+  off-genre asks refused and steered). No more canned one-liner loops.
+- TUI formatting: plain `you` / `agent` tags replace the box art, no
+  timestamps, both scrollbars removed and long lines wrap in-frame - the
+  whole console is one frame, no scrolling.
+- The terminal tab is claimed at startup (OSC title): shows
+  "thousand-eyes" instead of "Windows PowerShell" while the TUI runs.
+- README: static banner screenshot (docs/banner.png, rendered from the
+  Scene frame arrays as a truecolor PNG) next to the animated GIF; the GIF
+  now opens on the finished art instead of a near-black first frame.
+- CI fix: the test workflow no longer installs unpinned deps next to the
+  package's own pins (ResolutionImpossible); version bump 0.6.1.
+
 ## 0.6.0 (2026-11-12)
 
 - TUI banner: the reactive scene now renders straight from the frame arrays

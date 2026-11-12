@@ -128,7 +128,12 @@ def test_cli_demo_runs_without_permission_gate(capsys):
 
 
 def test_version_visible():
-    assert __version__ == "0.6.0"
+    import re
+
+    from thousand_eyes import __version__ as pkg_version
+    # single source of truth: the package's own __version__ (pyproject mirrors it)
+    assert __version__ == pkg_version
+    assert re.match(r"\d+\.\d+\.\d+", __version__)
 
 
 # ---------------------------------------------------------------- html
