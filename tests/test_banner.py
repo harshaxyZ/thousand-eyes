@@ -130,6 +130,16 @@ def test_final_frame_shows_both_taglines():
     assert "S E E   E V E R Y T H I N G .   M I S S   N O T H I N G ." in visible
 
 
+def test_narrow_terminal_falls_back_cleanly():
+    """A too-narrow console must not crash: Scene shrinks, worst case the
+    caller gets a plain one-line title (show_banner handles it)."""
+    scene = Scene(30)
+    art = frame_to_text(scene.final_frame())
+    lines = art.splitlines()
+    assert all(len(line) <= 30 + 40 for line in lines)  # never balloons wide
+    assert scene.rows >= 1
+
+
 def test_static_banner_fits_terminal_width():
     for width in (80, 100, 120, 160):
         scene = banner.Scene(width)
