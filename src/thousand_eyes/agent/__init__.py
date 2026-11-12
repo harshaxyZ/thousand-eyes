@@ -1,4 +1,4 @@
-"""Thousand Eyes v0.5 — the agentic self-audit layer (read-only, evidence-first)."""
+"""Thousand Eyes v0.5 - the agentic self-audit layer (read-only, evidence-first)."""
 
 from .analytics import Analytics
 from .classify import classify, tools_for

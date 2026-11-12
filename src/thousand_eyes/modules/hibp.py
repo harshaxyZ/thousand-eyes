@@ -3,7 +3,7 @@
 Optional key (HIBP_API_KEY env var). A breach name in the JSON is a leaf
 with a date, UNLESS the payload includes a username field, which makes it
 a pivot. No key -> skip, print "skipped". Never pulls breach dumps, never
-attempts to deanonymise anything — only calls the "breaches for account"
+attempts to deanonymise anything - only calls the "breaches for account"
 endpoint, which returns breach names/dates, not personal data.
 """
 

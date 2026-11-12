@@ -1,4 +1,4 @@
-"""darkweb — dark-web index mining, keyless and read-only.
+"""darkweb - dark-web index mining, keyless and read-only.
 
 Uses Ahmia's CLEARNET search endpoint (https://ahmia.fi/search/). Ahmia
 indexes Tor hidden services and serves its index over plain HTTPS, so this
@@ -9,7 +9,7 @@ is ALREADY INDEXED NEXT TO. An existence/intel fact, not access.
 Anti-scrape note (verified live 2026-11-04): the plain ?q= query returns a
 ~4.7 KB EMPTY LANDING PAGE; only a query carrying the hidden form token
 (16d742=18c116, see the form markup) returns real results. We read the
-token from the module constant — if Ahmia ever rotates it, the zero-signal
+token from the module constant - if Ahmia ever rotates it, the zero-signal
 landing page is detected and reported as INCONCLUSIVE (error), never as a
 fabricated "no mentions". Chrome furniture (the footer "Contact" onion,
 the MITM-warning CSS) must never become a "finding": we only accept
@@ -17,7 +17,7 @@ onions that appear INSIDE <li class="result"> blocks of the results list.
 
 Evidence law:
   - one GET per seed term (email / username), capped per scan;
-  - an .onion host inside a result block is a LEAF (never a pivot —
+  - an .onion host inside a result block is a LEAF (never a pivot -
     nothing is fetched, ever);
   - no-result page → zero leaves AND zero "clean" claims beyond a leaf
     count of zero; landing-page → inconclusive error.
@@ -89,7 +89,7 @@ def _looks_like_landing_page(html: str) -> bool:
 async def run(client: httpx.AsyncClient, term: str, *, sink=None) -> dict:
     """Returns {"leaves": [...], "errors": [...], "checked": int}.
 
-    Each leaf: {"site": "darknet: <onion> — <title>", "url": <search url>,
+    Each leaf: {"site": "darknet: <onion> - <title>", "url": <search url>,
                 "status": <http status>, "category": "darknet"}.
     """
     if sink:
@@ -113,13 +113,13 @@ async def run(client: httpx.AsyncClient, term: str, *, sink=None) -> dict:
     if _looks_like_landing_page(resp.text):
         # Ambiguity resolution (live-verified): rare/zero-hit queries return
         # the search landing page, SAME AS a rotated anti-scrape token would
-        # for a real victim's term. Never claim either way — zero leaves,
+        # for a real victim's term. Never claim either way - zero leaves,
         # zero errors, and a skipped-note the report shows once.
         return {
             "leaves": [],
             "errors": [],
             "note": (
-                "darknet index: no indexed mentions visible, or anti-scrape page — "
+                "darknet index: no indexed mentions visible, or anti-scrape page - "
                 "worth a manual re-check via https://ahmia.fi/search/?q=<term> over Tor"
             ),
             "checked": 1,
@@ -129,9 +129,9 @@ async def run(client: httpx.AsyncClient, term: str, *, sink=None) -> dict:
     for hit in parse_results(resp.text):
         label = f"darknet: {hit['onion']}"
         if hit["title"]:
-            label += f" — {hit['title'][:120]}"
+            label += f" - {hit['title'][:120]}"
         elif hit["description"]:
-            label += f" — {hit['description'][:120]}"
+            label += f" - {hit['description'][:120]}"
         if hit["last_seen"]:
             label += f" (index-seen {hit['last_seen']})"
         leaves.append({

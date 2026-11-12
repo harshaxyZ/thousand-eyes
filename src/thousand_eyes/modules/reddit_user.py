@@ -1,4 +1,4 @@
-"""reddit-user — public user about.json (keyless; verified shape 2026-11-03).
+"""reddit-user - public user about.json (keyless; verified shape 2026-11-03).
 
 GET https://www.reddit.com/user/<username>/about.json
 → 200 {"data": {"name", "created_utc", "total_karma", "link_karma", ...}}
@@ -7,7 +7,7 @@ GET https://www.reddit.com/user/<username>/about.json
 
 Late-2026 reality: Reddit gates anonymous .json aggressively from some
 networks/UAs. We send a normal descriptive UA and accept that 403 may be
-the common outcome — reported, not hidden.
+the common outcome - reported, not hidden.
 """
 
 from __future__ import annotations

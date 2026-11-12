@@ -1,10 +1,10 @@
-"""wayback — Internet Archive CDX lookup (keyless, verified 2026-11-03).
+"""wayback - Internet Archive CDX lookup (keyless, verified 2026-11-03).
 
   GET https://web.archive.org/cdx/search/cdx?url={host}/{path*}&output=json&fl=timestamp,original,statuscode&collapse=urlkey&limit=N
 
 For a URL lead we query snapshots of that exact URL; for a domain lead we
 query the wildcard host. Snapshot URLs that differ from the live URL become
-url pivots the engine may fetch at the next depth — archived pages are a
+url pivots the engine may fetch at the next depth - archived pages are a
 classic wildfire spread (deleted bios, moved profiles).
 """
 

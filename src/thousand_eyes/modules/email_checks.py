@@ -1,14 +1,14 @@
-"""email_checks — the email-registration sweep engine (v0.3).
+"""email_checks - the email-registration sweep engine (v0.3).
 
 Reads data/email_checks.yaml; each entry is a *verified* anonymous check:
   kind: json   → walk a JSON dot-path and compare against a registered/absent value
   kind: status → the HTTP status itself decides registered/absent
 Entries with `disabled: true` (or an unknown kind) are skipped without a
 request. Ambiguous outcomes (both/neither marker) are dropped, never
-reported — same false-positive safety net as the other teardown modules.
+reported - same false-positive safety net as the other teardown modules.
 
 Characteristics: no password-reset flows, no credential probes, no
-login-walled endpoints — anonymous read-only existence checks only.
+login-walled endpoints - anonymous read-only existence checks only.
 """
 
 from __future__ import annotations

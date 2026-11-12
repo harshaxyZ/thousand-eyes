@@ -1,4 +1,4 @@
-"""domains — the infrastructure arm for DOMAIN leads (v0.3).
+"""domains - the infrastructure arm for DOMAIN leads (v0.3).
 
 Reworked out of dns_module so the same facts serve both an email seed
 (email → its domain) and a standalone domain lead produced by e.g.
@@ -94,7 +94,7 @@ async def _crt_sh(client: httpx.AsyncClient, domain: str) -> tuple[list[dict], s
         return [], f"{MODULE}: crt.sh invalid json"
 
     # bug fix: crt.sh returns a JSON OBJECT on its error paths; iterating a
-    # dict here used to crash with an AttributeError — guard the shape.
+    # dict here used to crash with an AttributeError - guard the shape.
     if not isinstance(crt_data, list):
         return [], f"{MODULE}: crt.sh returned non-list payload"
 

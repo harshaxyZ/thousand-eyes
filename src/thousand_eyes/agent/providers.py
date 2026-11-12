@@ -82,7 +82,7 @@ def client_for(model: Optional[str] = None) -> _BaseLLM:
         return GeminiClient(key, GEMINI_FLASH_LITE)
     raise RuntimeError(
         "no LLM key found: set ANTHROPIC_API_KEY (claude) or GEMINI_API_KEY "
-        "(free tier) — without one, use --demo for the offline replay")
+        "(free tier) - without one, use --demo for the offline replay")
 
 
 # ------------------------------------------------------------------ claude
@@ -183,7 +183,7 @@ class ClaudeClient(_BaseLLM):
 
 
 class GeminiClient(_BaseLLM):
-    """Streaming Gemini chat (kept from v0.5 — free-tier fallback)."""
+    """Streaming Gemini chat (kept from v0.5 - free-tier fallback)."""
 
     provider = "gemini"
 

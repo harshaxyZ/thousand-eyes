@@ -1,4 +1,4 @@
-# Email-registration checks — verified-by-probe only.
+# Email-registration checks - verified-by-probe only.
 #
 # Every entry below was verified with a real request on 2026-11-03 before
 # being committed. A check declares: the URL template, what a REGISTERED
@@ -28,6 +28,6 @@ sites:
     url_template: "https://login.microsoftonline.com/distresultado"
     note: >-
       placeholder-style entry kept out of execution on purpose until you
-      verify the Autodiscover probe shape yourself — see userrealm module,
+      verify the Autodiscover probe shape yourself - see userrealm module,
       which supersedes this check keylessly.
     disabled: true

@@ -8,7 +8,7 @@ Flow (per operator request, all events streamed to the UI via callbacks):
   synth     one streaming LLM call renders the structured markdown report
 
 Self-audit rule: the LLM never executes tools itself; it only PICKS from the
-registry. The harness executes. That keeps the fence physical — the model
+registry. The harness executes. That keeps the fence physical - the model
 cannot argue its way around it.
 """
 
@@ -124,7 +124,7 @@ class Planner:
         """Execute the full pipeline; returns the final markdown report.
 
         fast=True skips the per-round LLM self-audit (and its token cost)
-        and uses one short synthesis pass — same tools, same evidence,
+        and uses one short synthesis pass - same tools, same evidence,
         ~half the wall clock. The TUI runs fast by default.
         """
         self.goal = goal or self.goal
@@ -152,7 +152,7 @@ class Planner:
                         batch.append((tool, {arg: lead}))
             # ---- self-audit: ask the LLM what's still dark
             if self.fast:
-                # fast mode: no LLM round-trip — every family in the round
+                # fast mode: no LLM round-trip - every family in the round
                 # fires once, in registry order. Same evidence, half the wait.
                 audit = []
                 await self.emit("step", {"label": f"round {depth}: firing "
@@ -291,7 +291,7 @@ class Planner:
             picked = [str(n) for n in names if str(n) in self.tools][:4]
             await self.emit("audit", {"picked": picked, "depth": depth})
             return picked
-        except Exception:  # noqa: BLE001 — audit is advisory only
+        except Exception:  # noqa: BLE001 - audit is advisory only
             return []
 
     # ------------------------------------------------------------ synthesis
@@ -316,7 +316,7 @@ class Planner:
             f"Subject leads: {', '.join(leads)}.\n"
             f"Goal: {goal_text}.\n"
             f"Safety fence in force: {FENCE}\n"
-            "Remember: blocked/ambiguous results are INCONCLUSIVE — never "
+            "Remember: blocked/ambiguous results are INCONCLUSIVE - never "
             "report them as 'not found'.\n\n"
             f"EVIDENCE LEDGER ({len(ledger)} rows, deduped, evidence-only):\n{digest}\n\n"
             f"BREACH & LEAK ROWS:\n{breach_digest}\n\n"
