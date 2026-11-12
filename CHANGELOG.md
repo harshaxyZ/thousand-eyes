@@ -36,6 +36,11 @@
 - Bug fixes found by live runs: chess.com returns `joined` as a unix
   timestamp (not a string); the model shown in the status line is now the
   model that will actually answer (never a hardcoded default).
+- **Free LLM paths that actually work:** a local ollama server is now
+  discovered automatically (free, no key, no data leaving the machine), and
+  Google's "free tier not available for this project" 403 now explains the
+  three real fixes instead of printing a code. The audit itself never needs
+  an LLM - it is the chat and the narrative that do.
 
 ## 0.6.2 (2026-11-12)
 

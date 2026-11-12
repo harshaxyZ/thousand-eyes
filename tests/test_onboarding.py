@@ -104,8 +104,79 @@ def test_cli_setup_flag_uses_the_guided_flow(monkeypatch):
     assert called.get("ran") is True
 
 
-# ------------------------------------------------------------------ doctor
+# --------------------------------------------------------- free llm paths
 
+def test_local_ollama_is_discovered_when_running(monkeypatch):
+    """A local ollama server = a completely free, keyless, offline LLM."""
+    from thousand_eyes.agent import providers
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"models": [{"name": "qwen2.5:7b"}, {"name": "llama3.2:3b"}]}
+
+    monkeypatch.setattr(providers.httpx, "get", lambda *a, **k: FakeResponse())
+    assert providers.local_models() == ["qwen2.5:7b"]
+    assert providers.best_local_model() == "qwen2.5:7b"
+
+
+def test_local_ollama_absent_is_not_an_error(monkeypatch):
+    from thousand_eyes.agent import providers
+
+    def boom(*a, **k):
+        raise providers.httpx.ConnectError("refused")
+
+    monkeypatch.setattr(providers.httpx, "get", boom)
+    assert providers.local_models() == []
+    assert providers.best_local_model() == ""
+
+
+def test_gemini_free_tier_403_explains_the_fix(monkeypatch):
+    """The 403 google returns when a project has no free-tier access must
+    tell the operator what to do, not just print a code."""
+    import asyncio
+
+    from thousand_eyes.agent import providers
+
+    class FakeStream:
+        status_code = 403
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def aiter_lines(self):
+            yield ""
+
+        async def aread(self):
+            return (b'{"error":{"code":403,"message":"The Gemini API free '
+                    b'tier is not available for this project."}}')
+
+    class FakeClient:
+        def stream(self, *a, **k):
+            return FakeStream()
+
+    monkeypatch.setattr(providers.httpx, "AsyncClient",
+                        lambda *a, **k: FakeClient())
+    client = providers.GeminiClient("fake-key")
+
+    async def _run():
+        out = []
+        async for chunk in client.chat([{"role": "user", "content": "hi"}]):
+            out.append(chunk)
+        return out
+
+    with pytest.raises(RuntimeError) as exc:
+        asyncio.run(_run())
+    assert "free-tier" in str(exc.value)
+    assert "ollama" in str(exc.value)
+
+
+# ------------------------------------------------------------------ doctor
 def test_doctor_runs_and_reports_every_section(capsys, monkeypatch):
     from thousand_eyes import doctor
 
