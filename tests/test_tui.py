@@ -1,4 +1,4 @@
-"""TUI tests — chat-first generic agent; audits fire only on real leads."""
+"""TUI tests - chat-first generic agent; audits fire only on real leads."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from thousand_eyes.banner import Scene, frame_to_text  # noqa: E402
 # ------------------------------------------------------------- intent routing
 
 @pytest.mark.parametrize("text,action,lead", [
-    # smalltalk — never an audit
+    # smalltalk - never an audit
     ("yo what's up", "chat", None),
     ("yo", "chat", None),
     ("hey", "chat", None),
@@ -35,7 +35,7 @@ from thousand_eyes.banner import Scene, frame_to_text  # noqa: E402
     ("run a full audit on me", "ask_lead", None),
     ("search the dark web", "chat", None),
     ("find stuff about me", "chat", None),
-    # real leads — audit fires
+    # real leads - audit fires
     ("someuser_42", "audit", "someuser_42"),
     ("audit someuser_42", "audit", "someuser_42"),
     ("scan tammy_faye", "audit", "tammy_faye"),

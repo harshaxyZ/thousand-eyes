@@ -57,7 +57,7 @@ async def test_gravatar_name_and_url_produce_evidence_backed_nodes_only(router, 
     data = result.to_dict()
 
     node_values = {n["value"] for n in data["nodes"]}
-    # v0.3: the seed itself is now a graph node (bug fix — it used to be
+    # v0.3: the seed itself is now a graph node (bug fix - it used to be
     # silently missing from the JSON/DOT exports)
     assert node_values == {FIXTURE_EMAIL, "Fixture Person", "https://twitter.com/fixtureperson"}
     assert len(data["edges"]) == 2
@@ -85,7 +85,7 @@ async def test_unknown_address_produces_no_public_pivot(router, transport, monke
     data = result.to_dict()
 
     # v0.3: the seed is itself a graph node now (bug fix in models), so an
-    # empty scan contains exactly one node — the seed — and zero edges.
+    # empty scan contains exactly one node - the seed - and zero edges.
     assert data["nodes"] == [{"class": "pivot", "type": "email", "value": FIXTURE_EMAIL}]
     assert data["edges"] == []
 
