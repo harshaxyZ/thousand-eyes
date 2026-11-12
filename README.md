@@ -1,4 +1,22 @@
-# thousand-eyes 🔥 wildfire edition (v0.4)
+# thousand-eyes 🔥 wildfire edition (v0.5)
+
+
+![thousand-eyes banner — animated](readme_banner.gif)
+
+```
+▀▅▅▅▅▅▅▄▂▀▖▁   ▗▄▖ ▊▄▅▅▅▖▁ ▛▀▁   ▊▄▜  ▀▅▅▅▅▅▜  ▛▅▅▅▄▂ ▗▄▖    ▛▄▁▄▅▅▅▅▀▜      ▁▀▅▅▅▅▅▅▄▂▀▖▁   ▗▄▖▛▅▅▅▅▅▅▄▜ ▁▀▅▅▅▅▀▖
+▆▃▃▜▗▅▃▃▃▎▊▐   ▌▃▎▅▆▅▃▃▃▖▆▜▎▃▊   ▊▃▌▗▆▆▃▃▃▃▃▃▛▆▆▃▃▃▃▆▅▊▅▇▅▖  ▎▊▊▃▗▅▃▃▃▜▅▖    ▊▘▗▅▃▃▃▃▃▃▎▊▐   ▌▃▎▎▛▅▃▃▃▃▃▃▗▆▆▃▃▃▃▃▃▘
+   ▎▟▊   ▎▊▐▁▁▁▟▌▎▎▘▊   ▊▄▐▎▌▊   ▊▌▌▙▁▁▁▁▁▁  ▌▙▝▁▁▁▂▟▊▊▄▄▁▊▁ ▎▟▊▌▐▎   ▎▌▊    ▊▄▝▐▁▁▁   ▇▄▁▀▂▇▟▛▅▎▟▊▁▁▁▁  ▎▁▊▁▁▁▁
+   ▎▊▊   ▎▅▂▂▄▂▁▅▎▎▊▊   ▊▐▐▎▘▊   ▊▗▐▎▆▃▂▂▂▘▃▂▌▅▂▂▄▂▂▗▊▊▐▐▅▃▝▃▎▊▊▗▌▎   ▎▘▊    ▊▅▛▄▂▂▀▙▖   ▇▎▟▊▆▇ ▎▛▀▂▂▄▙▖  ▆▃▂▄▂▝▃▁
+   ▎▌▊   ▎▊▗▇▇▇▐▌▎▎▌▊   ▊▐▌▌▌▊   ▊▐▌▎  ▇▇▇▇▌▊▘▌▎▆▇▇▇▎▊▊▌▐▎ ▌▂▅▃▊▊▌▎   ▎▌▊    ▊▌▊▗▇▇▇▇     ▎▐▊   ▎▝▊▇▇▇▇     ▇▇▇▊▌▐▎
+   ▎▟▊   ▎▊▐   ▐▌▎▆▃▅▆▆▆▆▅▃▆▃▆▆▅▆▆▅▂▛▅▆▅▆▆▆▅▂▖▌▎▎   ▎▊▊▂▐▎ ▇▄▂▂▌▟▇▆▆▆▆▞▂▃    ▊▁▃▆▆▆▅▆▅▂   ▎▎▊   ▎▂▝▆▆▆▆▅▜▛▅▆▆▅▆▆▅▂▘
+   ▇▀▘   ▇▀▘    ▆▀  ▆▀▄▄▄▘   ▆▄▄▄▄▘ ▇▅▄▄▄▄▄▟  ▆▀    ▇▄▘▆▀▟   ▇▄▘▆▄▄▄▄▄▀▟      ▆▄▄▄▄▄▄▄▄   ▇▅▘   ▇▄▄▄▄▄▄▄▀▇▅▄▄▄▄▄▘
+                                  O P E N - S O U R C E   I N T E L L I G E N C E
+                             S E E   E V E R Y T H I N G .   M I S S   N O T H I N G .
+```
+
+> the art above is the real thing — `python scripts/make_readme_gif.py` re-renders
+> it from the live banner (eyes track the cursor, glare sweeps the letters).
 
 One lead in → an impact-ranked evidence dossier out. An OSINT self-audit CLI
 that thinks like an attacker: you feed it identifiers you own (email,
@@ -21,6 +39,17 @@ counts · manual next-steps · skipped/inconclusive (never faked silent)
 ```
 pipx install thousand-eyes       # or: pip install thousand-eyes
 ```
+
+```
+npm i -g thousand-eyes            # node wrapper around the same python CLI
+thousand-eyes you@example.com     # identical output to the pip install
+```
+
+The npm package is a thin wrapper: it locates your installed
+`thousand-eyes` python package and runs its console script. The python
+package itself still needs `pipx install thousand-eyes` (or pip) first.
+Publishing the npm package is a manual step — `npm publish` with your
+token; the files are in `package.json` + `bin/`.
 
 Dependencies (`httpx`, `pyyaml`, `rich`) install automatically. Nothing
 beyond those three reaches your machine; `numpy` is only used by the optional

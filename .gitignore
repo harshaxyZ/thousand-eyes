@@ -11,3 +11,4 @@ report.json
 graph.dot
 *.pyc
 .pytest_cache/
+.session_extract/
