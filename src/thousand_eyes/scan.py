@@ -46,6 +46,7 @@ from thousand_eyes.impact import AMBIENT as _AMBIENT_TIER, leaf_tier, pivot_tier
 from thousand_eyes.models import NULL_SINK, Leaf, ModuleError, Node, ScanResult, Skipped, normalise_value
 from thousand_eyes.modules import (
     breach_existence,
+    bluesky_profile,
     darkweb,
     domains,
     email_checks,
@@ -53,9 +54,11 @@ from thousand_eyes.modules import (
     fetch,
     github_commit_search,
     github_profile,
+    gitlab_profile,
     gravatar,
     hibp,
     keybase_proofs,
+    mastodon_lookup,
     pgp,
     registration_leaves,
     username_checks,
@@ -352,13 +355,22 @@ class _Engine:
         self.sink.bump()
         res_kb = await keybase_proofs.run(self.client, username)
         self.sink.bump()
+        res_gl = await gitlab_profile.run(self.client, username)
+        self.sink.bump()
         self._stage(f"username[{username}] â†’ reddit")
         res_reddit = await reddit_user.run(self.client, username)
+        self.sink.bump()
+        res_mast = await mastodon_lookup.run(self.client, username)
+        self.sink.bump()
+        res_bsky = await bluesky_profile.run(self.client, username)
         self.sink.bump()
         for label, res in (
             ("github-profile", res_gh),
             ("keybase-proofs", res_kb),
+            ("gitlab-profile", res_gl),
             ("reddit-user", res_reddit),
+            ("mastodon-lookup", res_mast),
+            ("bluesky-profile", res_bsky),
         ):
             _record(self.result, label, res)
             self.take(lead, res.get("pivots") or [])

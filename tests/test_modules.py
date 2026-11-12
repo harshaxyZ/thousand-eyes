@@ -8,7 +8,8 @@ import hashlib
 
 import httpx
 
-from thousand_eyes.modules import dns_module, hibp
+from thousand_eyes.modules import (bluesky_profile, dns_module, gitlab_profile,
+                                    hibp, mastodon_lookup)
 from thousand_eyes.scan import run_scan
 
 FIXTURE_EMAIL = "fixture.subject@example.org"
@@ -113,3 +114,70 @@ async def test_depth_is_capped_at_two(router, transport):
     assert any(n.value == depth2_url for n in result.nodes.values())
     # ...but must never itself have been fetched (no request to that host/path).
     assert not any(depth2_url in u for u in router.requested_urls)
+
+# --------------------------------------------------- social profile lookups
+
+GITLAB_HIT = [{"id": 7, "username": "fixturehandle", "name": "Fix Ture",
+               "created_at": "2019-04-01T00:00:00.000Z", "public_email": None}]
+
+MASTODON_HIT = {"id": 123, "username": "fixturehandle", "display_name": "Fx",
+                "url": "https://mastodon.social/@fixturehandle",
+                "created_at": "2020-02-02T00:00:00.000Z"}
+
+BLUESKY_HIT = {"did": "did:plc:fixture", "handle": "fixturehandle.bsky.social",
+               "displayName": "Fx", "createdAt": "2021-01-01T00:00:00.000Z"}
+
+
+async def test_gitlab_profile_confirms_exact_match(router, transport):
+    router.add_host_path("gitlab.com", "/api/v4/users",
+                         httpx.Response(200, json=GITLAB_HIT))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await gitlab_profile.run(client, "fixturehandle")
+    assert res["error"] is None
+    urls = [p for p in res["pivots"] if p["type"] == "url"]
+    assert urls and urls[0]["value"] == "https://gitlab.com/fixturehandle"
+    assert any(p["type"] == "name" and p["value"] == "Fix Ture"
+               for p in res["pivots"])
+
+
+async def test_gitlab_profile_silent_when_absent(router, transport):
+    router.add_host_path("gitlab.com", "/api/v4/users",
+                         httpx.Response(200, json=[]))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await gitlab_profile.run(client, "missing-handle")
+    assert res["error"] is None and res["pivots"] == []
+
+
+async def test_mastodon_lookup_confirms_and_404_is_silence(router, transport):
+    router.add_host_path("mastodon.social", "/api/v1/accounts/lookup",
+                         httpx.Response(200, json=MASTODON_HIT))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await mastodon_lookup.run(client, "fixturehandle")
+    assert res["error"] is None
+    assert any(p["value"] == "https://mastodon.social/@fixturehandle"
+               for p in res["pivots"])
+
+    router.add_host_path("mastodon.social", "/api/v1/accounts/lookup",
+                         httpx.Response(404, json={"error": "Record not found"}))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await mastodon_lookup.run(client, "missing-handle")
+    assert res["error"] is None and res["pivots"] == []
+
+
+async def test_bluesky_profile_confirms_and_error_payload_is_silence(router, transport):
+    router.add_host_path("public.api.bsky.app",
+                         "/xrpc/app.bsky.actor.getProfile",
+                         httpx.Response(200, json=BLUESKY_HIT))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await bluesky_profile.run(client, "fixturehandle")
+    assert res["error"] is None
+    assert any(p["value"] == "https://bsky.app/profile/fixturehandle.bsky.social"
+               for p in res["pivots"])
+
+    router.add_host_path("public.api.bsky.app",
+                         "/xrpc/app.bsky.actor.getProfile",
+                         httpx.Response(400, json={"error": "InvalidRequest",
+                                                   "message": "Profile not found"}))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await bluesky_profile.run(client, "missing-handle")
+    assert res["error"] is None and res["pivots"] == []
