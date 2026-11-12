@@ -48,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Wildfire self-audit CLI - one lead in, an evidence-ranked web of public proof out.",
         epilog="Self-audit: scan identifiers you own or are authorized to review.",
     )
+    parser.add_argument("--version", action="version", version=f"thousand-eyes {__version__}",
+                        help="print the version stamp and exit")
     parser.add_argument("targets", nargs="*", help="one or more leads: email, E.164 phone, https URL, or username")
     parser.add_argument("--full", action="store_true",
                         help="wildfire mode: wider spawn caps + full 692-site WMN sweep + derived local-part handles")
