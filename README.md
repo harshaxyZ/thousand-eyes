@@ -1,5 +1,7 @@
 # thousand-eyes (v0.6) · wildfire edition
 
+[![tests](https://github.com/harshaxyZ/thousand-eyes/actions/workflows/tests.yml/badge.svg)](https://github.com/harshaxyZ/thousand-eyes/actions/workflows/tests.yml)
+
 **one lead in: an impact-ranked evidence dossier out.**
 
 <p align="center">
@@ -149,6 +151,26 @@ glyphs, fg, bg, bg_default = scene.final_frame()
 print(frame_to_text(scene.final_frame()))   # static frame with truecolor ANSI
 show_banner(loops=1)                        # full animation, plays once
 ```
+
+## FAQ
+
+**Windows console shows mojibake or crashes on the banner.**
+The banner needs truecolor; Windows Terminal is fine. Non-UTF8 consoles get
+a plain-text fallback automatically, and scans never depend on the banner
+(numpy is an optional extra).
+
+**How long is a full run?**
+Polite mode: ~1 min. `--full` wildfire: ~3.5 min, ~735 requests, all
+recorded in `--url-log`.
+
+**Does it ever touch data I do not own?**
+It only walks pivots that the response body itself confirms, and the demo
+mode (`--demo`) is a fully offline synthetic replay. Blocked or ambiguous
+sources are rendered as inconclusive, never as "not found".
+
+**Where is the interactive CONFIRM gate?**
+Gone since v0.4: scripted runs just work; the consent statement stays on
+screen and `--url-log` gives you the full outbound trail.
 
 ## Tests
 
