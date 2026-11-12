@@ -128,7 +128,7 @@ def test_cli_demo_runs_without_permission_gate(capsys):
 
 
 def test_version_visible():
-    assert __version__ == "0.5.0"
+    assert __version__ == "0.6.0"
 
 
 # ---------------------------------------------------------------- html
