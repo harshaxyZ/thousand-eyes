@@ -917,6 +917,8 @@ class ThousandEyesApp(App):
         elif kind == "module":
             state = data.get("state")
             mark = "[#ff6b6b]fail[/]" if state == "fail" else "[#5bd6a0]ok[/]"
+            if state != "skip":
+                self._scan_stats["modules"] = self._scan_stats.get("modules", 0) + 1
             n = data.get("findings", 0)
             extra = f" · {n} finding(s)" if n else ""
             err = data.get("error") or ""
