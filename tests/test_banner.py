@@ -130,7 +130,7 @@ def test_final_frame_shows_both_taglines():
     assert "S E E   E V E R Y T H I N G .   M I S S   N O T H I N G ." in visible
 
 
-def test_narrow_terminal_falls_back_cleanly():
+def test_narrow_terminal_falls_back_cleanly(monkeypatch):
     """A too-narrow console must not crash: show_banner prints the plain
     one-line title when no Scene level fits, and a Scene never renders
     zero rows."""
