@@ -233,6 +233,19 @@ async def test_chess_profile_confirms(router, transport):
     assert any(p["type"] == "name" for p in res["pivots"])
 
 
+async def test_chess_profile_handles_unix_timestamp_joined(router, transport):
+    # the live API returns `joined` as an int timestamp, not a string
+    payload = dict(CHESS_HIT)
+    payload["joined"] = 1514923445
+    router.add_host_path("api.chess.com", "/pub/player/fixturehandle",
+                         httpx.Response(200, json=payload))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await chess_profile.run(client, "fixturehandle")
+    assert res["error"] is None
+    assert any("chess.com account created 2018-01" in p["value"]
+               for p in res["pivots"])
+
+
 async def test_security_headers_reports_present_and_missing(router, transport):
     router.add_host_path("fixture.example", "/",
                          httpx.Response(200, headers={

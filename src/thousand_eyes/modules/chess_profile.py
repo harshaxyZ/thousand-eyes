@@ -10,12 +10,29 @@ name and joined are literal API facts.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import httpx
 
 from thousand_eyes.http_client import describe_http_error
 
 MODULE = "chess-profile"
 API_URL = "https://api.chess.com/pub/player"
+
+
+def _joined_date(value) -> str:
+    """Chess.com returns `joined` as a unix timestamp int (older payloads
+    used an ISO string) - normalise both to YYYY-MM-DD."""
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc).strftime("%Y-%m-%d")
+        except (OverflowError, OSError, ValueError):
+            return ""
+    if isinstance(value, str) and value.strip():
+        return value.strip()[:10]
+    return ""
 
 
 async def run(client: httpx.AsyncClient, username: str) -> dict:
@@ -63,14 +80,14 @@ async def run(client: httpx.AsyncClient, username: str) -> dict:
             "status": resp.status_code,
         })
 
-    joined = (data.get("joined") or "").strip()
+    joined = _joined_date(data.get("joined"))
     if joined:
         pivots.append({
             "type": "fact",
-            "value": f"chess.com account created {joined[:10]}",
+            "value": f"chess.com account created {joined}",
             "source": MODULE,
             "evidence_url": url,
-            "snippet": f"Chess.com joined=\"{joined[:10]}\"",
+            "snippet": f"Chess.com joined={joined}",
             "status": resp.status_code,
         })
 

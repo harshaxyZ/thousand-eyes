@@ -160,6 +160,15 @@ async def _run_darkweb(engine: "_Engine", term: str) -> dict:
 def _record(result: ScanResult, module_label: str, res: dict) -> None:
     """One place that understands the legacy {error|errors|skipped|...}
     module result shapes and flattens them into the ScanResult."""
+    # quality accounting: how many source families actually answered
+    sources = result.meta.setdefault("sources", {})
+    bucket = sources.setdefault(module_label, {"ok": 0, "failed": 0, "skipped": 0})
+    if res.get("error") or res.get("errors"):
+        bucket["failed"] += 1
+    elif res.get("skipped"):
+        bucket["skipped"] += 1
+    else:
+        bucket["ok"] += 1
     if res.get("error"):
         result.errors.append(ModuleError(module_label, res["error"]))
     for err in res.get("errors") or []:

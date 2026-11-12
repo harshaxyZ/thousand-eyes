@@ -115,6 +115,22 @@ def _seed_handle(result: ScanResult) -> str:
     return ""
 
 
+def _coverage_line(result: ScanResult) -> str:
+    """Quality metric: how many source families answered, failed or were
+    skipped. A thin coverage is itself a finding - the operator should know
+    the dossier is partial."""
+    sources = result.meta.get("sources") or {}
+    ok = sum(v.get("ok", 0) for v in sources.values())
+    failed = sum(v.get("failed", 0) for v in sources.values())
+    skipped = sum(v.get("skipped", 0) for v in sources.values())
+    total = ok + failed + skipped
+    if not total:
+        return ""
+    pct = int(round(100 * ok / total))
+    thin = "  <- thin coverage: most sources did not answer" if pct < 50 else ""
+    return f"source coverage: {ok} answered · {failed} failed · {skipped} skipped ({pct}% of {total} checks){thin}"
+
+
 def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.4.0") -> str:
     if verbose:
         return render_verbose(result, version=version)
@@ -169,6 +185,9 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
             lines.append(f"    · … and {len(amb_concise) - 8} more (see --json)")
         lines.append("")
         lines.append("  " + _summary_counts(result))
+        coverage = _coverage_line(result)
+        if coverage:
+            lines.append("  " + coverage)
 
         seed_types = [t.strip() for t in result.seed_type.split(",") if t.strip()]
         manual: list[tuple[str, str]] = []

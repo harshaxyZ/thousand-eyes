@@ -132,6 +132,19 @@ def test_failed_checks_are_listed_with_reasons():
     assert "hibp: rate limited (status 429)" in text
 
 
+def test_source_coverage_is_reported():
+    r = _username_result()
+    r.meta["sources"] = {
+        "github-profile": {"ok": 2, "failed": 0, "skipped": 0},
+        "wayback": {"ok": 0, "failed": 1, "skipped": 0},
+        "hibp": {"ok": 0, "failed": 0, "skipped": 1},
+    }
+    text = render_text(r, version="0.6.2")
+    assert "source coverage: 2 answered" in text
+    assert "1 failed" in text and "1 skipped" in text
+    assert "50% of 4 checks" in text
+
+
 # ------------------------------------------------------------------ tui
 
 @pytest.mark.asyncio
