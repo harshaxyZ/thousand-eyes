@@ -45,8 +45,8 @@ def test_rejects_anything_else(raw):
 
 
 def test_accepts_bar_username_seed():
-    """v0.3: a bare handle is a USER-ASSERTED lead — the operator typed it,
-    which is its evidence — so normalise accepts and labels it."""
+    """v0.3: a bare handle is a USER-ASSERTED lead - the operator typed it,
+    which is its evidence - so normalise accepts and labels it."""
     seed = normalise_seed("fixtureuser")
     assert seed.type == "username"
     assert seed.value == "fixtureuser"

@@ -90,7 +90,7 @@ async def test_dns_runs_for_non_free_mailbox_domain(router, transport):
 # v0.3 depth semantics: max_depth bounds how far spawned leads are
 # processed. max_depth=1 means: seed modules run, their URL pivots are
 # fetched (depth-1 leads), but anything found inside those fetches is only
-# recorded as a node — exactly the legacy "depth max 2" rule.
+# recorded as a node - exactly the legacy "depth max 2" rule.
 async def test_depth_is_capped_at_two(router, transport):
     digest = _gravatar_digest(FIXTURE_EMAIL)
     depth1_url = "https://social.example/fixtureperson"

@@ -144,7 +144,7 @@ def test_gemini_stream_parse_and_stats():
 
 
 def test_system_role_hoisted_to_system_instruction():
-    """Gemini v1beta rejects role 'system' — chat() must hoist it."""
+    """Gemini v1beta rejects role 'system' - chat() must hoist it."""
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

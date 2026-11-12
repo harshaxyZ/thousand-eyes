@@ -84,7 +84,7 @@ async def test_darkweb_landing_page_is_inconclusive_not_clean(router, transport)
     from thousand_eyes.modules import darkweb
     router.add_host_path(
         "ahmia.fi", "/search/",
-        httpx.Response(200, text="<html><body><h1>Ahmia — Search Tor Hidden Services</h1></body></html>"),
+        httpx.Response(200, text="<html><body><h1>Ahmia - Search Tor Hidden Services</h1></body></html>"),
     )
     async with httpx.AsyncClient(transport=transport) as client:
         res = await darkweb.run(client, "someone@example.com")
@@ -107,7 +107,7 @@ async def test_darkweb_module_reports_leaves_not_pivots(router, transport):
     )
     async with httpx.AsyncClient(transport=transport) as client:
         res = await darkweb.run(client, "someone@example.com")
-    assert "pivots" not in res  # leaves only — nothing is expanded
+    assert "pivots" not in res  # leaves only - nothing is expanded
     assert all(l["category"] == "darknet" for l in res["leaves"])
     assert res["errors"] == []
 
