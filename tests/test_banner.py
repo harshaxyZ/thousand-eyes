@@ -133,8 +133,8 @@ def test_final_frame_shows_both_taglines():
 def test_narrow_terminal_falls_back_cleanly():
     """A too-narrow console must not crash: Scene shrinks, worst case the
     caller gets a plain one-line title (show_banner handles it)."""
-    scene = Scene(30)
-    art = frame_to_text(scene.final_frame())
+    scene = banner.Scene(30)
+    art = banner.frame_to_text(scene.final_frame())
     lines = art.splitlines()
     assert all(len(line) <= 30 + 40 for line in lines)  # never balloons wide
     assert scene.rows >= 1
