@@ -135,7 +135,10 @@ def test_failed_checks_are_listed_with_reasons():
 # ------------------------------------------------------------------ tui
 
 @pytest.mark.asyncio
-async def test_tui_setup_and_skill_commands():
+async def test_tui_setup_and_skill_commands(tmp_path, monkeypatch):
+    # keep the test off the real home dir: /skill writes a file
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     from thousand_eyes.tui import ThousandEyesApp
     app = ThousandEyesApp()
     async with app.run_test() as pilot:
@@ -148,3 +151,5 @@ async def test_tui_setup_and_skill_commands():
         app._command("/skill")
         await pilot.pause()
         assert any("skill written" in s for s in said)
+        written = list(tmp_path.rglob("SKILL.md"))
+        assert written and "thousand-eyes" in written[0].read_text(encoding="utf-8")
