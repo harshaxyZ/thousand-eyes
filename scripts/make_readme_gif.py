@@ -142,6 +142,10 @@ def main() -> int:
         if i % 12 == 0:
             print(f"  frame {i+1}/{n}", file=sys.stderr)
 
+    # first frame = the finished banner: GitHub's static preview shows the
+    # real art instead of the near-black decode start
+    idx_frames.insert(0, idx_frames[-1])
+
     delay_cs = max(2, int(100 / fps))
     write_gif(out, idx_frames, delay_cs)
     dt = time.perf_counter() - t0
