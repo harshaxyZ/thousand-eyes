@@ -204,8 +204,10 @@ async def test_commands():
         # verify /cancel unwinds it (same race-free pattern as the HUD test)
         from types import SimpleNamespace
 
+        from thousand_eyes.agent.analytics import Analytics
+
         app._busy = True
-        app._planner = SimpleNamespace(stop=lambda: None)
+        app._planner = SimpleNamespace(stop=lambda: None, analytics=Analytics())
         inp.value = "/cancel"
         await pilot.press("enter")
         await pilot.pause()
