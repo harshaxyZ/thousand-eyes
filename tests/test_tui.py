@@ -161,7 +161,12 @@ async def test_hud_visible_progress_bar_and_stats():
         inp = app.query_one("#input")
         inp.value = "/demo"
         await pilot.press("enter")
-        await pilot.pause(1.0)
+        for _ in range(40):
+            app._tick()                   # drive the HUD heartbeat ourselves
+            live = stats.renderable.lower()
+            if app._busy and "t+" in live and "eta" in live and "tools" in live:
+                break
+            await pilot.pause(0.1)
         assert app._busy is True
         app._tick()                       # force a HUD heartbeat
         live = stats.renderable.lower()
