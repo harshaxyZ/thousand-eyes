@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-THOUSAND EYES - final banner (one file, needs numpy: pip install numpy).
+THOUSAND EYES - the reactive banner (one module, needs numpy: pip install numpy).
 
 High-resolution terminal renderer: every terminal cell is matched against 22 block/quadrant/eighth
 symbols from a 4x8 sample grid, so edges land on ~3px steps instead of 12px blocks.
 Eye + faceted purple title, letter-by-letter decode (startup only), glare sweeps, two typed taglines.
 
-Run:         python final.py
-Play once:   python final.py --once        (~4.3 s, then freezes on the final frame)
-Static:      python final.py --static
+Run:         python -m thousand_eyes.banner
+Play once:   python -m thousand_eyes.banner --once        (~4.3 s, then freezes on the final frame)
+Static:      python -m thousand_eyes.banner --static
 Options:     --no-eye   --small   --speed 1.5   --fps 30
-Import:      from final import show_banner; show_banner(loops=1)
+Import:      from thousand_eyes.banner import show_banner; show_banner(loops=1)
 
 Needs a truecolor terminal (Windows Terminal) and ~150 columns for the full size
 (it shrinks automatically on narrower windows).
