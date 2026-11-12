@@ -22,12 +22,7 @@ import asyncio
 import sys
 
 from thousand_eyes import __version__
-from thousand_eyes.banner import show_banner
-from thousand_eyes.html_report import render_html
-from thousand_eyes.live import make_sink  # noqa: F401 (documented external knob)
 from thousand_eyes.normalise import InvalidSeed, normalise_seed
-from thousand_eyes.output import render_dot, render_json, render_text
-from thousand_eyes.scan import run_scan
 
 DISCLAIMER = """\
 thousand-eyes v{v} - public-data self-audit (wildfire edition)
@@ -69,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="agent mode: model id (default gemini-3.5-flash-lite; flash-lite = free tier)")
     parser.add_argument("--agent-budget", type=int, default=120,
                         help="agent mode: max LLM calls (default 120)")
+    parser.add_argument("--setup", action="store_true",
+                        help="guided onboarding: pick a provider and store "
+                             "your LLM key (gemini free tier or anthropic)")
+    parser.add_argument("--skill", metavar="ACTION", choices=("install", "uninstall", "status"),
+                        help="install/uninstall this CLI as an IDE-agent skill "
+                             "(writes ~/.claude/skills/thousand-eyes)")
     return parser
 
 
@@ -160,6 +161,7 @@ def print_banner() -> None:
     if not sys.stdout.isatty():
         return
     try:
+        from thousand_eyes.banner import show_banner
         show_banner(loops=1)
     except Exception:
         print("\x1b[1;38;2;200;64;255mTHOUSAND EYES\x1b[0m")
@@ -183,6 +185,25 @@ def main(argv: list[str] | None = None) -> int:
     if any(a in ("-h", "--help") for a in args_list):
         print(DISCLAIMER.format(v=__version__))
     args = parser.parse_args(args_list)
+
+    # onboarding first - no targets, no scan, just the guided flow
+    if args.setup:
+        from thousand_eyes.setup import prompt_key
+        return prompt_key()
+    if args.skill:
+        from thousand_eyes.skill import install_skill, skill_status, uninstall_skill
+        if args.skill == "install":
+            for p in install_skill():
+                print(f"skill written: {p}")
+            print("restart your IDE session to pick it up.")
+            return 0
+        if args.skill == "uninstall":
+            removed = uninstall_skill()
+            print("\n".join(f"skill removed: {p}" for p in removed) or
+                  "skill was not installed")
+            return 0
+        print(f"thousand-eyes {__version__} - {skill_status()}")
+        return 0
 
     # bare `thousand-eyes` - the purple chat TUI
     if not args.targets and not any(
@@ -217,6 +238,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.agent:
         return _run_agent(args, transport)
+
+    # lazy: the scan stack (httpx et al) is heavy - import it only when a
+    # scan actually runs, so --help/--setup/--skill/--version boot instantly
+    from thousand_eyes.output import render_dot, render_json, render_text
+    from thousand_eyes.scan import run_scan
 
     wild = args.full
     sink = None
@@ -265,6 +291,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nfull report written to {args.json}")
 
     if args.html:
+        from thousand_eyes.html_report import render_html
         with open(args.html, "w", encoding="utf-8") as fh:
             fh.write(render_html(result_obj, version=__version__))
         print(f"dossier written to {args.html}")
