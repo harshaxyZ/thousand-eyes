@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.6.2 (2026-11-12)
+
+- One-line install that actually works for a newcomer: `install.ps1`
+  (Windows) and `install.sh` (macOS/Linux) find python 3.10+, install pipx
+  if missing, install the CLI from the repo, inject numpy for the banner,
+  verify the binary and print the next steps. No admin, no sudo, no
+  Docker, no daemons - a plain terminal CLI.
+- Guided key onboarding: `thousand-eyes --setup` (or `/setup` in the TUI)
+  stores a provider + key in `~/.thousand-eyes/config.json` (mode 0600);
+  the provider layer reads it first, so chat and `--agent` come alive
+  immediately. Without a key the chat still answers on the offline engine.
+- IDE-agent skill: `thousand-eyes --skill install` writes a SKILL.md
+  (with the evidence rules and the fence) into
+  `~/.claude/skills/thousand-eyes/`, so an IDE agent knows when and how
+  to drive the tool.
+- Identity reasoning: a matching handle on several platforms is handle
+  reuse, not proof of one person. Confirmed accounts are tagged
+  `[confirmed]` or `[handle-reuse - same person unconfirmed]`, and the
+  report states that corroboration (name, bio, avatar, cross-links) is
+  required before attributing accounts to one identity. The agent report
+  prompt and the chat brain follow the same rule.
+- Failures are first-class: a "checks that failed" section lists every
+  errored source with its real reason, instead of a single inconclusive
+  footnote. The HTTP layer takes one conservative connect-level retry
+  (never on 429, never re-issuing a request that reached a server).
+- Four more keyless sources: Hacker News (Algolia), Docker Hub,
+  Chess.com, and a first-party HTTP security-header posture probe for the
+  operator's own url/domain lead.
+- Boot: the CLI no longer imports the scan stack (httpx) or the banner
+  until it is needed - `--version`, `--help`, `--setup` and `--skill` now
+  start in ~0.6s instead of ~1.7s.
+
 ## 0.6.1 (2026-11-12)
 
 - Pipeline upscale: three new keyless username modules - GitLab (REST users

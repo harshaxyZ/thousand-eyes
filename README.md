@@ -34,6 +34,16 @@ counts ✔ manual next-steps ✔ skipped/inconclusive (never faked silent)
 - **Evidence only.** Every row carries its source, the request that produced
   it and a quotable snippet. Blocked sources stay *inconclusive*; nothing is
   ever silently reported as "not found".
+- **It reasons about identity, not just strings.** The same username on two
+  platforms is *handle reuse*, not proof of one person. Every confirmed
+  account is tagged `[confirmed]` or `[handle-reuse - same person
+  unconfirmed]`, and the report states plainly that corroboration (name,
+  bio, avatar, cross-links) is required before attributing accounts to a
+  single human. Your `janedoe_` on Instagram and someone else's on X are
+  two different people, and the tool says so.
+- **Failures are visible.** A source that errors, times out or rate-limits
+  shows up in a "checks that failed" section with the real reason - never
+  laundered into a clean-looking negative.
 - **Fenced by code, not by prompt.** No password-reset flows, no credential
   probing, no broker APIs, no breach-dump pulls, no `.onion` resolution. The
   LLM planner cannot bypass any of it: it only *selects* tools; the
@@ -43,13 +53,33 @@ counts ✔ manual next-steps ✔ skipped/inconclusive (never faked silent)
   the glare sweep, letters decode in. Same art in the chat TUI, rendered
   straight from the scene's frame arrays.
 
-## Install (one command)
+## Install (one command, copy-paste ready)
 
-```
-pipx install thousand-eyes       # or: pip install thousand-eyes
+**Windows (PowerShell):**
+
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/janedoe/thousand-eyes/main/install.ps1 | iex"
 ```
 
+**macOS / Linux:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/janedoe/thousand-eyes/main/install.sh | bash
 ```
+
+That script finds python 3.10+, installs `pipx` if needed (no admin, no
+sudo), installs thousand-eyes into an isolated environment, adds `numpy` for
+the animated banner, verifies the binary and prints your next steps. Re-run it
+anytime to upgrade.
+
+Prefer to drive it yourself?
+
+```bash
+pipx install "git+https://github.com/harshaxyZ/thousand-eyes.git"   # or: pipx install thousand-eyes
+pipx inject thousand-eyes numpy                                     # banner only; the audit does not need it
+```
+
+```bash
 npm i -g thousand-eyes            # node wrapper around the same python CLI
 thousand-eyes you@example.com     # identical output to the pip install
 ```
@@ -58,9 +88,27 @@ The npm package is a thin wrapper: it locates your installed `thousand-eyes`
 python package and runs its console script. Publishing the npm package is a
 manual step (`npm publish`); the files are in `package.json` + `bin/`.
 
-Dependencies (`httpx`, `pyyaml`, `rich`) install automatically. `numpy` is
-only used by the optional startup banner. Every dependency follows the
-repo's 3-phase verification gate (see `research/dependency-gate-3phase.md`).
+Dependencies (`httpx`, `pyyaml`, `rich`, `textual`) install automatically and
+stay pinned. `numpy` is only used by the optional startup banner. Every
+dependency follows the repo's 3-phase verification gate (see
+`research/dependency-gate-3phase.md`).
+
+**No Docker, no daemons, no cloud.** It is a plain python CLI: install it,
+run it in your terminal, it walks public endpoints and prints the dossier
+locally. Nothing is uploaded anywhere; the only traffic is read-only GETs to
+the first-party public endpoints it audits.
+
+## 60-second setup
+
+```bash
+thousand-eyes --setup             # pick a provider, paste a key (gemini free tier or claude)
+thousand-eyes --skill install     # teach your IDE agent (Claude Code, ...) how to drive the tool
+thousand-eyes                     # open the chat console
+```
+
+`--setup` stores the key in `~/.thousand-eyes/config.json` (mode 0600) and
+the chat picks it up instantly. Without a key the chat still answers - it
+runs on the built-in offline engine, so the tool is never dead weight.
 
 ## Use
 
@@ -110,10 +158,10 @@ the keyless public endpoints.
 | lead type | modules |
 |-----------|---------|
 | email | gravatar, breach-index (HIBP, keyed), github-commit-search, email-registration sweep, Microsoft userrealm, xposedornot breach-existence, Hudson Rock stealer-log (keyed), PGP (keys.openpgp.org), registration leaves, darkweb index (ahmia), exact-document search, domain posture (DoH/crt.sh/RDAP) |
-| username | WhatsMyName sweep (692-site dataset), github-profile, keybase-proofs, reddit-user, darkweb index |
-| url | fetch + strict extraction (+github interconnect), wayback CDX |
+| username | WhatsMyName sweep (692-site dataset), github-profile, gitlab-profile, keybase-proofs, reddit-user, mastodon-lookup, bluesky-profile, hackernews-user, dockerhub-profile, chess-profile, darkweb index |
+| url | fetch + strict extraction (+github interconnect), wayback CDX, security-header posture |
 | phone | exact-document (quoted search) |
-| domain | DoH MX records + certificate transparency + RDAP |
+| domain | DoH MX records + certificate transparency + RDAP, security-header posture |
 
 Every confirmed finding becomes a new typed LEAD; leads spawn leads until
 spawn-cap bands close. The graph remains reproducible and quotable:
@@ -183,7 +231,7 @@ models and bugs that do not weaken the fence.
 ## Tests
 
 ```
-py -3 -m pytest -q                    # 104 passed
+py -3 -m pytest -q                    # 121 passed
 ```
 
 ## Dependency gate (supply-chain defense)
