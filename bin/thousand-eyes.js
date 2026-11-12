@@ -7,7 +7,11 @@ const path = require('path');
 function resolvePy() {
   const cands = ['python3', 'python'];
   if (process.env.VIRTUAL_ENV) {
-    cands.unshift(path.join(process.env.VIRTUAL_ENV, 'bin', 'python'));
+    const venv = process.env.VIRTUAL_ENV;
+    // windows venvs live in Scripts/, posix ones in bin/
+    cands.unshift(path.join(venv, 'Scripts', 'python.exe'));
+    cands.unshift(path.join(venv, 'Scripts', 'python'));
+    cands.unshift(path.join(venv, 'bin', 'python'));
   }
   return cands;
 }
