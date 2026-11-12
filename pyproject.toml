@@ -39,7 +39,7 @@ Issues = "https://github.com/harshaxyZ/thousand-eyes/issues"
 [project.optional-dependencies]
 banner = ["numpy>=1.26,<3"]   # animated startup banner only; scans never touch it
 dev = [
-    "pytest==8.3.3",
+    "pytest==9.2.0",
     "pytest-asyncio>=1.4,<2",
 ]
 
