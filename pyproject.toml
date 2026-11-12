@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thousand-eyes"
-version = "0.5.5"
+version = "0.6.0"
 description = "Thousand Eyes wildfire - evidence-only OSINT self-audit. One lead in, an impact-ranked web of public proof out. Default mode is LLM-free; --agent adds an LLM planner behind the same fence. No credential probes, no invented findings."
 readme = "README.md"
 requires-python = ">=3.10"
