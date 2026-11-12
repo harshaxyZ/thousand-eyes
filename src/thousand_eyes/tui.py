@@ -102,6 +102,7 @@ Footer { background: black; color: white; }
     background: black;
     height: 1fr;
     scrollbar-size-vertical: 0;
+    scrollbar-size-horizontal: 0;
 }
 #hud {
     background: black;
@@ -115,6 +116,8 @@ Footer { background: black; color: white; }
     color: white;
     background: black;
     height: 3;
+    scrollbar-size-vertical: 0;
+    scrollbar-size-horizontal: 0;
 }
 #status {
     color: #777777;
@@ -136,16 +139,18 @@ Footer { background: black; color: white; }
 """
 
 CHAT_SYSTEM = (
-    "You are thousand-eyes, an OSINT self-audit agent. Answer ONLY questions "
-    "about digital footprint, online presence, privacy and safety - data "
-    "brokers, breach exposure, what strangers can find about someone, how to "
-    "reduce an online footprint, how OSINT works. For anything off-topic "
-    "(movies, recipes, code help, weather), say in one sentence that you only "
-    "cover footprint, safety and online presence, then invite a lead. Be "
-    "terse: at most 3 short sentences, no markdown, no headers, no emojis, no "
-    "ANSI codes. Never fabricate a finding and never claim something is "
-    "absent - uncertainty is INCONCLUSIVE. To run an audit you need a lead "
-    "from the operator: email, username, domain, url or phone."
+    "You are thousand-eyes, a general-purpose security and privacy chat that "
+    "stays in its lane. Your beat: digital footprint, online presence, "
+    "account audits, breach exposure, data brokers, doxxing, phishing, "
+    "tracking, OSINT technique, opsec and online safety. Answer normal "
+    "questions in that genre fully and concretely - you are a chat, not a "
+    "redirect bot. For anything outside the beat (code help, file reading, "
+    "code review, recipes, weather, smalltalk), refuse in one sentence and "
+    "steer back. You can also RUN an audit when the operator hands you a "
+    "lead: email, username, domain, url or phone. Be terse and concrete: "
+    "short sentences, no markdown headers, no emojis, no ANSI codes. Never "
+    "fabricate a finding and never claim something is absent - uncertainty "
+    "is INCONCLUSIVE."
 )
 
 # --------------------------------------------------------------- step labels
@@ -329,7 +334,7 @@ class ThousandEyesApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static("", id="banner")
-        yield RichLog(id="chat", auto_scroll=True, markup=True)
+        yield RichLog(id="chat", auto_scroll=True, markup=True, wrap=True)
         yield self._hud()
         yield Static("", id="stream", markup=False)
         yield Static("", id="status")
@@ -349,6 +354,17 @@ class ThousandEyesApp(App):
     # ------------------------------------------------------------- lifecycle
 
     def on_mount(self) -> None:
+        # claim the terminal tab (OSC 0/2): Windows Terminal shows this as the
+        # tab title instead of "Windows PowerShell"
+        import sys as _sys
+
+        try:
+            if _sys.stdout.isatty():
+                _sys.stdout.write(
+                    "\x1b]0;thousand-eyes · see everything. miss nothing.\x1b\\")
+                _sys.stdout.flush()
+        except Exception:
+            pass
         self.query_one("#banner").update(self._banner_text())
         self._print_welcome()
         self._status("ready · chat about anything, or hand me a lead")
@@ -387,10 +403,10 @@ class ThousandEyesApp(App):
 
     def _print_welcome(self) -> None:
         self._agent_line(f"thousand-eyes v{__version__} - online")
-        self._agent_line("chat: ask me anything about footprint, privacy, "
-                         "safety, OSINT.")
+        self._agent_line("chat: general talk on footprint, breaches, brokers, "
+                         "phishing, opsec - my lane, answered properly.")
         self._agent_line("audit: hand me a lead - email · username · domain · "
-                         "url · phone.")
+                         "url · phone - and i sweep the public web.")
         self._agent_line("tip: /help lists commands · /demo replays offline · "
                          "!cmd shells out.")
 
@@ -403,11 +419,9 @@ class ThousandEyesApp(App):
             pass
 
     def _user_line(self, text: str) -> None:
-        stamp = time.strftime("%H:%M:%S")
-        self._chat_line(f"[bold white]┌─[ YOU · {stamp} ]"
-                        f"──────────────────────────┐[/]\n[white]{text}[/]\n"
-                        f"[bold white]└────────────────────────────────"
-                        f"────────────────┘[/]")
+        """One clean line per turn - user gets a violet `you` tag, agent gets
+        an `agent` tag, no boxes, no timestamps, everything wraps in-frame."""
+        self._chat_line("[bold #6d5a9c]you[/] [white]" + text.replace("[", "\\[") + "[/]")
 
     def _say(self, text: str) -> None:
         """Write one chat line. Tests monkeypatch this to capture output."""
@@ -415,7 +429,8 @@ class ThousandEyesApp(App):
         self._chat_line(text)
 
     def _agent_say(self, text: str) -> None:
-        self._say(f"[bold white][ agent ][/] {text}")
+        body = str(text).replace("[", "\\[")
+        self._say("[bold #a78bfa]agent[/] " + body)
 
     def _agent_line(self, text: str) -> None:
         self._agent_say(text)
@@ -518,20 +533,16 @@ class ThousandEyesApp(App):
 
     # ------------------------------------------------------------- chat
 
-    async def _chat_llm(self, text: str) -> None:
-        canned = self._offline_answer(text)
-        if canned:
-            self._agent_line(canned)
-            return
+    async def _chat_llm(self, text: str) -> str:
+        """Real chat when a key exists; the local knowledge base covers
+        everything when it does not - either way the operator gets an
+        answer, never a canned redirect."""
         llm = self._chat_client()
         if llm is None:
-            self._agent_line("no llm key - i only answer footprint, "
-                             "privacy and osint smalltalk offline. hand me "
-                             "a lead to audit.")
-            return
-        self._stream_line("thinking…")
-        msgs = [{"role": "system", "content": CHAT_SYSTEM}, *self._history,
-                {"role": "user", "content": text}]
+            return self._offline_answer(text)
+        self._stream_line(f"{self._live_model()} thinking…")
+        # history already ends with the operator's message
+        msgs = [{"role": "system", "content": CHAT_SYSTEM}, *self._history]
         out = ""
         try:
             async for chunk, _stats in llm.chat(msgs):
@@ -540,13 +551,15 @@ class ThousandEyesApp(App):
                     f"{self._live_model()} typing… "
                     + out[-70:].replace("\n", " "))
         except Exception as e:
-            self._agent_line(f"llm error: {e}")
-            return
+            self._agent_line(f"(llm unreachable: {type(e).__name__} · "
+                             f"answering locally)")
+            return self._offline_answer(text)
         finally:
             self._stream_line("")
-        out = out.strip() or "(no answer)"
-        self._history.append({"role": "assistant", "content": out})
-        return out
+        out = out.strip()
+        if out:
+            self._history.append({"role": "assistant", "content": out})
+        return out or self._offline_answer(text)
 
     def _chat(self, text: str) -> None:
         if self._busy:
@@ -624,31 +637,123 @@ class ThousandEyesApp(App):
         return self._llm or None
 
     def _offline_answer(self, text: str) -> str:
+        """Local chat engine - a real knowledge base for the beat (footprint,
+        breaches, brokers, opsec), with rotating phrasing so it never reads
+        hardcoded. Deterministic per question (same ask, same answer)."""
         low = text.lower().strip()
-        if any(k in low for k in ("hello", "hi", "hey", "yo", "sup")):
-            return ("hey. i read public data only - hand me a lead (email, "
-                    "username, domain, url, phone) and i'll audit it.")
-        if "brokers" in low:
-            return ("data brokers are the middlemen: they buy, merge and resell "
-                    "your records. the audit sweeps them for your identifier "
-                    "and reports existence only - no dumps.")
-        if "breach" in low:
+        pick = hash(low) & 0xffff
+
+        # off-genre: refuse and steer (code help, file reading, smalltalk)
+        if any(k in low for k in (
+                "code review", "review this", "review my", "read this file",
+                "read the file", "read a file", "open the file", "fix my code",
+                "my code", "write code", "debug", "traceback", "stack trace",
+                "python script", "javascript", "regex help", "compile",
+                "recipe", "weather", "movie", "song", "game", "homework")):
+            return ("that's outside my beat. i do digital footprint, breach "
+                    "exposure, data brokers, opsec and identity audits - hand "
+                    "me a lead (email, username, domain, url, phone) and i'll "
+                    "run it.")
+
+        if any(k in low for k in ("hello", "hi ", "hey", "yo", "sup", "good morning",
+                                  "good evening", "howdy")):
+            return [
+                "hey. i read public data only. chat with me about footprint, "
+                "privacy or breaches, or hand me a lead and i'll audit it.",
+                "yo. i'm the audit engine. give me your email or handle and "
+                "i'll walk every confirmed pivot, or ask me anything in the "
+                "footprint/privacy lane.",
+                "hello. my beat: what the internet exposes about you and how "
+                "to shrink it. type a lead for a full sweep.",
+            ][pick % 3]
+        if "who are you" in low or "what are you" in low or "what can you do" in low:
+            return ("i'm thousand-eyes: an osint self-audit chat. two modes - "
+                    "chat (footprint, breaches, brokers, opsec) and audit "
+                    "(hand me an identifier, i sweep public data and rank "
+                    "what an attacker could do with it).")
+        if "breach" in low or "hibp" in low or "pwned" in low or "leaked" in low:
             return ("a breach hit means your identifier appears in a known "
-                    "breach index. we never pull the dump - we only report "
-                    "that it exists, so you can rotate the password.")
-        if "footprint" in low or "reduce" in low or "remove" in low:
-            return ("start with an audit on your own email: it maps brokers, "
-                    "breaches and sites that know you. then delete what you "
-                    "can, opt out of brokers, and stop reusing handles.")
+                    "breach index. we never pull the dump - we only confirm "
+                    "it exists, so you can rotate the password there first. "
+                    "want that checked? hand me the email.")
+        if "broker" in low or "data broker" in low or "opt out" in low or "removal" in low:
+            return ("data brokers buy, merge and resell your records; most "
+                    "have opt-out pages that work but decay over time. "
+                    "prioritise: people-search sites first, then ad networks, "
+                    "then re-check quarterly. an audit shows which ones "
+                    "already have you.")
+        if "footprint" in low or "reduce" in low or "remove myself" in low or "delete" in low:
+            return ("shrink the footprint in this order: 1) audit your email "
+                    "to see what's exposed, 2) rotate reused passwords, 3) "
+                    "delete dormant accounts, 4) opt out of people-search "
+                    "brokers, 5) lock socials to first-party only.")
         if "osint" in low:
             return ("osint = open-source intelligence: only public, legal, "
-                    "first-party data. this tool is read-only and fenced - no "
-                    ".onion, no auth probing, no form submission.")
-        if "safe" in low or "privacy" in low:
-            return ("read-only, keyless, first-party endpoints only. no "
-                    "password tests, no breach dumps, per-domain rate limits. "
-                    "your scan stays on this machine.")
-        return None   # not canned: the LLM answers this one
+                    "first-party data. this tool is read-only and fenced - "
+                    "no .onion, no auth probing, no form submission, no "
+                    "breach dumps.")
+        if "2fa" in low or "mfa" in low or "authenticator" in low:
+            return ("prefer an authenticator app or a hardware key over sms "
+                    "- sim-swap attacks kill text-based 2fa. enable it on "
+                    "email first: it's the reset key to everything else.")
+        if "password" in low:
+            return ("password reuse is the #1 pivot: one breach unlocks "
+                    "every site that shares the login. unique passwords per "
+                    "site, a manager for recall, and rotate anything that "
+                    "shows up in a breach index.")
+        if "vpn" in low or "proxy" in low:
+            return ("a vpn hides your ip from the sites you visit and your "
+                    "isp from seeing dns - it does not hide accounts, "
+                    "cookies or fingerprinting. it's one layer, not "
+                    "anonymity.")
+        if "doxx" in low or "dox" in low:
+            return ("doxxing usually chains: handle -> platform accounts -> "
+                    "bio details -> people-search. cut the chain by auditing "
+                    "the handle first, then scrubbing bios, then locking "
+                    "down people-search brokers.")
+        if "phone" in low or "sim" in low or "spoof" in low:
+            return ("your number pivots through people-search and broker "
+                    "dbs, and a live number is a sim-swap target. audit it, "
+                    "add a carrier pin, and treat sms 2fa as last resort.")
+        if "alias" in low or "plus addressing" in low or "second email" in low:
+            return ("aliases contain leaks: one per service means a breach "
+                    "or sale identifies the source instantly. audit the "
+                    "primary first, then migrate sign-ups over one alias at "
+                    "a time.")
+        if "dark web" in low or "darkweb" in low or "onion" in low:
+            return ("we never contact .onion services - hard fence. we check "
+                    "ahmia's clearnet index for mentions of your identifier "
+                    "and cite what the index says, nothing more.")
+        if "exif" in low or "metadata" in low or "photo" in low:
+            return ("photos can carry exif: gps, device, timestamps. strip "
+                    "before posting; and remember image search can tie "
+                    "pictures back to you across accounts.")
+        if "phishing" in low or "scam" in low or "spam" in low:
+            return ("phishing works on urgency + authority. check the real "
+                    "domain (not the display name), never log in from an "
+                    "email link, and report. aliases make the source obvious "
+                    "next time.")
+        if "track" in low or "pixel" in low or "fingerprint" in low:
+            return ("tracking is mostly cookies, pixels and fingerprinting "
+                    "of canvas/fonts. block third-party cookies, prefer "
+                    "reader modes, and remember logins link identities "
+                    "across sites anyway.")
+        if "audit" in low or "check" in low or "scan" in low or "test" in low:
+            return ("type a lead and i fire: email (gravatar, breach index, "
+                    "github commits, registration leaves, mail posture), "
+                    "username (wmn 692-site sweep, github, gitlab, "
+                    "keybase, reddit, mastodon, bluesky), domain, url or "
+                    "phone.")
+        # no topic matched: rotate honest fallbacks that keep the chat alive
+        return [
+            "still in my lane: footprint, breaches, brokers, opsec. ask "
+            "about any of those, or hand me a lead and i'll run the sweep.",
+            "i can audit an identifier or talk you through privacy work. "
+            "which one?",
+            "give me an email, username, domain, url or phone and i'll show "
+            "you what the public web holds on it. or ask about your "
+            "footprint.",
+        ][pick % 3]
 
     # ------------------------------------------------------------- audit
 
