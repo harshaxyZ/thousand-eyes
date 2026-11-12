@@ -36,11 +36,14 @@ can ignite the graph (seeds always run; caps count only spawned leads).
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import deque
 from dataclasses import dataclass
 
 import httpx
 
+from thousand_eyes import registry
+from thousand_eyes.handle_rules import extract_handle
 from thousand_eyes.http_client import new_client
 from thousand_eyes.impact import AMBIENT as _AMBIENT_TIER, leaf_tier, pivot_tier
 from thousand_eyes.models import NULL_SINK, Leaf, ModuleError, Node, ScanResult, Skipped, normalise_value
@@ -79,18 +82,22 @@ _WILD_SPLIT = _re.compile(r"[._\-]+")
 # -------- spawn-cap policy (v0.4): default = polite evidence walk;
 # --wild = the wildfire spread (bigger reach, derived handles, full sweep).
 _DEFAULT_SPAWN_CAPS = {
-    "email": 4,
-    "phone": 2,
-    "url": 24,
-    "username": 8,
-    "domain": 5,
+    # politeness ceilings, not speed knobs: how many SPAWNED leads of each
+    # type one seed may ignite. The real governor is the wall-clock budget
+    # (time_budget) plus the total-lead budget - a wide cascade that stays
+    # inside those bounds is exactly what a complete presence map needs.
+    "email": 12,
+    "phone": 3,
+    "url": 120,
+    "username": 24,
+    "domain": 16,
 }
 _WILD_SPAWN_CAPS = {
-    "email": 8,
-    "phone": 4,
-    "url": 64,
-    "username": 24,
-    "domain": 8,
+    "email": 20,
+    "phone": 6,
+    "url": 200,
+    "username": 48,
+    "domain": 24,
 }
 
 # expected engine cost (progress bar units) per enqueued lead type
@@ -208,6 +215,10 @@ class _Engine:
         wild: bool,
         all_sites: bool,
         sink=None,
+        on_event=None,
+        time_budget: float | None = None,
+        max_leads: int | None = None,
+        abort=None,
     ) -> None:
         self.result = result
         self.client = client
@@ -219,13 +230,55 @@ class _Engine:
         self.queue: deque[Lead] = deque()
         self.processed: set[tuple[str, str]] = set()
         self.spawned = {t: 0 for t in self.caps}
+        self.on_event = on_event
+        self.time_budget = time_budget
+        self.max_leads = max_leads
+        self.abort = abort
+        self.leads_processed = 0
+        self.t0 = time.monotonic()
+        self.modules_run = 0
+        self.modules_failed = 0
+        self.findings = 0
+        # (module, value) pairs already executed in this run - the cascade can
+        # reach the same handle through different paths; the module must not
+        # run twice on the same value.
+        self._module_runs: set[tuple[str, str]] = set()
+
+    # ---------------- live event plumbing ----------------
+    def emit(self, event: str, **data) -> None:
+        """Push a live event to the caller (the TUI renders these as the
+        'doing this / found that' feed). Never raises into the scan."""
+        if self.on_event is None:
+            return
+        try:
+            self.on_event((event, data))
+        except Exception:      # noqa: BLE001 - a broken UI must not break a scan
+            self.on_event = None
 
     # ---------------- sink plumbing ----------------
     def _stage(self, label: str) -> None:
         self.sink.stage(label)
+        self.emit("label", label=label)
 
     def _finding(self, tier: int, kind: str, label: str) -> None:
         self.sink.finding(tier, kind, label)
+        self.findings += 1
+        self.emit("found", tier=tier, kind=kind, value=label)
+
+    def _record_module(self, label: str, res: dict, lead: Lead | None = None,
+                       ms: float = 0.0) -> None:
+        """Record one module result and announce it live."""
+        _record(self.result, label, res)
+        self.modules_run += 1
+        failed = bool(res.get("error") or res.get("errors"))
+        if failed:
+            self.modules_failed += 1
+        n = len(res.get("pivots") or []) + len(res.get("leaves") or [])
+        self.emit("module", label=label, state="fail" if failed else "ok",
+                  findings=n, ms=round(ms * 1000),
+                  lead=lead.value if lead else "",
+                  lead_type=lead.type if lead else "",
+                  error=str(res.get("error") or "")[:160])
 
     def enqueue(self, lead_type: str, value: str, from_value: str, source: str, is_seed: bool = False, depth: int = 1) -> None:
         if not value:
@@ -283,197 +336,114 @@ class _Engine:
                     if t == "url" and v.startswith(_ARCHIVED_URL_PREFIX):
                         continue  # wayback recursion guard: snapshots are terminal evidence
                     self.enqueue(t, v, lead.value, p["source"], depth=lead.depth + 1)
+                if t == "url":
+                    # the cascade glue: a confirmed profile URL proves the
+                    # handle exists there, so the handle becomes the next
+                    # lead and the sweep continues from there.
+                    handle = extract_handle(v)
+                    if handle:
+                        self.enqueue("username", handle, lead.value, p["source"],
+                                     depth=lead.depth + 1)
 
-    async def _run_email_modules(self, lead: Lead) -> None:
-        email = lead.value
-        email_domain = email.rsplit("@", 1)[-1]
+    # ---------------- generic lead runner (the API bridge) ---------------
 
-        # Pre-claim the domain dedup key BEFORE the module gather: the email
-        # arm runs domain posture inline below, so userrealm's domain pivot
-        # must not enqueue a second identical domain processing later.
-        if not domains.is_free_mailbox(email_domain.lower()):
-            self.processed.add(("domain", normalise_value("domain", email_domain)))
+    def _stop_reason(self, leads: bool = True) -> str:
+        """Why the cascade should stop right now (empty = keep going).
 
-        # (label, coro-factory, self-tallying?) â€” sweeps tick per site inside
-        simple = [
-            ("gravatar", lambda: gravatar.run(self.client, email)),
-            ("hibp", lambda: hibp.run(self.client, email)),
-            ("github-commit-search", lambda: github_commit_search.run(self.client, email)),
-            ("userrealm", lambda: userrealm.run(self.client, email)),
-            ("pgp", lambda: pgp.run(self.client, email)),
-        ]
-        sweeps = [
-            ("email-checks", lambda: email_checks.run(self.client, email, sink=self.sink)),
-            ("breach-existence", lambda: self._breach_pair(email)),
-            ("registration-leaves", lambda: registration_leaves.run(self.client, email, sink=self.sink)),
-            ("darkweb", lambda: _darkweb_with_note(self, email)),
-            ("exact-document", lambda: exact_document.run(self.client, email)),
-        ]
-        pairs: list[tuple[str, dict]] = []
-        for label, factory in simple:
-            self._stage(f"email[{email}] â†’ {label}")
+        `leads=False` is used INSIDE a lead: a lead that is already being
+        processed must not be cut short by the lead budget it triggered.
+        """
+        if self.abort is not None:
             try:
-                res = await factory()
-            except httpx.HTTPError as exc:
-                res = {"pivots": [], "leaves": [], "error": f"engine: {type(exc).__name__}: {exc}"}
-            self.sink.bump()
-            pairs.append((label, res))
-        for label, factory in sweeps:
-            self._stage(f"email[{email}] â†’ {label}")
+                if self.abort():
+                    return "cancelled by the operator"
+            except Exception:      # noqa: BLE001
+                pass
+        if self.time_budget is not None and (time.monotonic() - self.t0) > self.time_budget:
+            return (f"time budget of {int(self.time_budget)}s reached - "
+                    f"{len(self.queue)} lead(s) left unexplored")
+        if leads and self.max_leads is not None and self.leads_processed >= self.max_leads:
+            return (f"lead budget of {self.max_leads} reached - "
+                    f"{len(self.queue)} lead(s) left unexplored")
+        return ""
+
+    def _stopped(self) -> bool:
+        """Budget guard: wall-clock budget, total-lead budget or an
+        operator-requested cancel."""
+        return bool(self._stop_reason())
+
+    async def _run_lead(self, lead: Lead) -> None:
+        """Run every module the registry declares for this lead type.
+
+        This IS the cascade: a module's confirmed pivots become new leads
+        (see take()), each new lead gets its own stage when the queue comes
+        back around, and the loop only ends when the frontier is exhausted,
+        the depth cap is hit, or the budget runs out. One seed in, the
+        person's whole reachable presence comes out.
+        """
+        specs = registry.modules_for(lead.type)
+        ctx = registry.Ctx(sink=self.sink,
+                           all_sites=(self.all_sites and lead.depth == 0))
+        for spec in specs:
+            if spec.max_depth is not None and lead.depth > spec.max_depth:
+                continue
+            if self._stop_reason(leads=False):
+                return
+            run_key = (spec.label, lead.value)
+            if run_key in self._module_runs:
+                # the cascade can reach the same handle through different
+                # paths - a module must not run twice on the same value
+                self.emit("module", label=spec.label, state="skip", findings=0,
+                          ms=0, lead=lead.value, lead_type=lead.type,
+                          error="already ran on this value")
+                continue
+            self._module_runs.add(run_key)
+            self._stage(f"{lead.type}[{lead.value[:60]}] \u2192 {spec.label}")
+            t0 = time.monotonic()
             try:
-                res = await factory()
+                res = await spec.fn(self.client, lead.value, ctx)
             except httpx.HTTPError as exc:
-                res = {"pivots": [], "leaves": [], "error": f"engine: {type(exc).__name__}: {exc}"}
-            pairs.append((label, res))
-        for label, res in pairs:
-            _record(self.result, label, res)
+                res = {"pivots": [], "leaves": [],
+                       "error": f"engine: {type(exc).__name__}: {exc}"}
+            except Exception as exc:      # a broken module must not kill the run
+                res = {"pivots": [], "leaves": [],
+                       "error": f"engine: {type(exc).__name__}: {exc}"}
+            if not spec.self_tallying:
+                self.sink.bump()
+            self._record_module(spec.label, res, lead, ms=time.monotonic() - t0)
             self.take(lead, res.get("pivots") or [])
             for leaf in res.get("leaves") or []:
                 cat = leaf.get("category", "")
-                added = self.result.append_leaf(leaf["site"], leaf["url"], leaf.get("status"), cat)
+                added = self.result.append_leaf(leaf["site"], leaf["url"],
+                                                 leaf.get("status"), cat)
                 if added:
                     tier, _ = leaf_tier(leaf["site"], cat)
                     self._finding(tier, cat or "leaf", leaf["site"])
 
-        email_domain = email.rsplit("@", 1)[-1]
-        if domains.is_free_mailbox(email_domain.lower()):
-            self.result.append_skipped("dns", f"{email_domain} is a free mailbox provider, domain arm skipped")
-        else:
-            self._stage(f"email[{email}] â†’ domain posture")
-            dns_res = await domains.run_domain(self.client, email_domain)
-            for h in dns_res.get("errors") or []:
-                self.result.errors.append(ModuleError("dns", str(h)))
-            for host in dns_res.get("hosts") or []:
-                if self.result.append_leaf(f"mail infrastructure: {host['value']}", host["evidence_url"], None, "infrastructure"):
-                    self._finding(_AMBIENT_TIER, "infra", host["value"])
+        # interconnect rule: a github PROFILE ROOT also carries keybase proofs
+        if lead.type == "url":
+            gh = _is_github_profile_root(lead.value)
+            if gh and ("github-profile", gh) not in self._module_runs:
+                for label, fn in (("github-profile", github_profile.run),
+                                  ("keybase-proofs", keybase_proofs.run)):
+                    self._stage(f"url[{lead.value[:60]}] \u2192 {label}")
+                    t0 = time.monotonic()
+                    try:
+                        res = await fn(self.client, gh)
+                    except httpx.HTTPError as exc:
+                        res = {"pivots": [], "error": f"engine: {type(exc).__name__}: {exc}"}
+                    self.sink.bump()
+                    self._record_module(label, res, lead, ms=time.monotonic() - t0)
+                    self._module_runs.add((label, gh))
+                    self.take(lead, res.get("pivots") or [])
 
-        if self.wild:
-            local = email.rsplit("@", 1)[0]
+        # --wild: deterministic handle permutations of the operator's own email
+        if self.wild and lead.type == "email":
+            local = lead.value.rsplit("@", 1)[0]
             self._stage("derived handles from local-part (--wild)")
             for cand in _wild_candidates(local):
-                self.enqueue("username", cand, email, "wild:localpart-permutation", depth=lead.depth + 1)
-
-    async def _breach_pair(self, email: str) -> dict:
-        """xposedornot keyless check plus the optional Hudson Rock stealer-log
-        check (skips cleanly without a key). Union of leaves/errors."""
-        res = await breach_existence.run(self.client, email)
-        rock = await breach_existence.run_hudsonrock(self.client, email)
-        if rock.get("skipped"):
-            res.setdefault("skipped", rock.get("skipped"))
-        for e in rock.get("errors") or []:
-            res.setdefault("errors", []).append(e)
-        res.setdefault("leaves", []).extend(rock.get("leaves") or [])
-        return res
-
-    async def _run_phone_modules(self, lead: Lead) -> None:
-        self._stage(f"phone[{lead.value}] â†’ exact-document")
-        res = await exact_document.run(self.client, lead.value)
-        self.sink.bump()
-        _record(self.result, "exact-document", res)
-        self.take(lead, res.get("pivots") or [])
-
-    async def _run_username_modules(self, lead: Lead) -> None:
-        username = lead.value
-        self._stage(f"username[{username}] â†’ github/keybase")
-        res_gh = await github_profile.run(self.client, username)
-        self.sink.bump()
-        res_kb = await keybase_proofs.run(self.client, username)
-        self.sink.bump()
-        res_gl = await gitlab_profile.run(self.client, username)
-        self.sink.bump()
-        self._stage(f"username[{username}] â†’ reddit")
-        res_reddit = await reddit_user.run(self.client, username)
-        self.sink.bump()
-        res_mast = await mastodon_lookup.run(self.client, username)
-        self.sink.bump()
-        res_bsky = await bluesky_profile.run(self.client, username)
-        self.sink.bump()
-        res_hn = await hackernews_user.run(self.client, username)
-        self.sink.bump()
-        res_dh = await dockerhub_profile.run(self.client, username)
-        self.sink.bump()
-        res_chess = await chess_profile.run(self.client, username)
-        self.sink.bump()
-        for label, res in (
-            ("github-profile", res_gh),
-            ("keybase-proofs", res_kb),
-            ("gitlab-profile", res_gl),
-            ("reddit-user", res_reddit),
-            ("mastodon-lookup", res_mast),
-            ("bluesky-profile", res_bsky),
-            ("hackernews-user", res_hn),
-            ("dockerhub-profile", res_dh),
-            ("chess-profile", res_chess),
-        ):
-            _record(self.result, label, res)
-            self.take(lead, res.get("pivots") or [])
-        self._stage(f"username[{username}] â†’ platform sweep (WMN)")
-        # derived handles (wild permutations) get the polite 120-site sweep -
-        # only the operator-typed handle earns the full 692-site stroll
-        derived = lead.source.startswith('wild:')
-        res_sweep = await username_checks.run(self.client, username, all_sites=self.all_sites and not derived, sink=self.sink)
-        _record(self.result, "username-sweep", res_sweep)
-        self.take(lead, res_sweep.get("pivots") or [])
-        self._stage(f"username[{username}] â†’ darknet index")
-        res_dark = await _run_darkweb(self, username)
-        for err in res_dark.get("errors") or []:
-            self.result.errors.append(ModuleError("darkweb", err))
-        for leaf in res_dark.get("leaves") or []:
-            if self.result.append_leaf(leaf["site"], leaf["url"], leaf.get("status"), "darknet"):
-                tier, _ = leaf_tier(leaf["site"], "darknet")
-                self._finding(tier, "darknet", leaf["site"])
-
-    async def _run_url_modules(self, lead: Lead) -> None:
-        url = lead.value
-        self._stage(f"url[{url[:60]}] â†’ fetch+extract")
-        res_fetch = await fetch.run(self.client, url)
-        self.sink.bump()
-        _record(self.result, "fetch", res_fetch)
-        self.take(lead, res_fetch.get("pivots") or [])
-
-        github_username = _is_github_profile_root(url)
-        if github_username:
-            res_gh = await github_profile.run(self.client, github_username)
-            self.sink.bump()
-            _record(self.result, "github-profile", res_gh)
-            self.take(lead, res_gh.get("pivots") or [])
-            res_kb = await keybase_proofs.run(self.client, github_username)
-            self.sink.bump()
-            _record(self.result, "keybase-proofs", res_kb)
-            self.take(lead, res_kb.get("pivots") or [])
-
-        self._stage(f"url[{url[:60]}] â†’ wayback")
-        res_wmb = await wayback.run(self.client, url)
-        self.sink.bump()
-        _record(self.result, "wayback", res_wmb)
-        self.take(lead, res_wmb.get("pivots") or [])
-
-        # posture probe: only for the operator's OWN lead (depth 0). Running
-        # it on every spawned pivot buries the dossier in header noise.
-        if lead.depth == 0:
-            self._stage(f"url[{url[:60]}] → security headers")
-            res_sh = await security_headers.run(self.client, url)
-            self.sink.bump()
-            _record(self.result, "security-headers", res_sh)
-            self.take(lead, res_sh.get("pivots") or [])
-
-    async def _run_domain_modules(self, lead: Lead) -> None:
-        self._stage(f"domain[{lead.value}] â†’ posture")
-        res = await domains.run_domain(self.client, lead.value)
-        self.sink.bump()
-        for err in res.get("errors") or []:
-            self.result.errors.append(ModuleError("domains", str(err)))
-        for host in res.get("hosts") or []:
-            if self.result.append_leaf(f"mail infrastructure: {host['value']}", host["evidence_url"], None, "infrastructure"):
-                self._finding(_AMBIENT_TIER, "infra", host["value"])
-
-        # posture probe: seed domains only (see the url path for the why)
-        if lead.depth == 0:
-            self._stage(f"domain[{lead.value}] → security headers")
-            res_sh = await security_headers.run(self.client, lead.value)
-            self.sink.bump()
-            _record(self.result, "security-headers", res_sh)
-            self.take(lead, res_sh.get("pivots") or [])
+                self.enqueue("username", cand, lead.value,
+                             "wild:localpart-permutation", depth=lead.depth + 1)
 
     async def run(self, seeds: list[tuple[str, str]]) -> None:
         for lead_type, value in seeds:
@@ -482,42 +452,83 @@ class _Engine:
             self.result.add_node(node)
             self.enqueue(lead_type, value, value, "seed", is_seed=True, depth=0)
 
+        stage_no = 0
         while self.queue:
+            reason = self._stop_reason()
+            if reason:
+                self.result.meta["stopped"] = reason
+                self.emit("stopped", reason=reason)
+                break
             lead = self.queue.popleft()
             if lead.depth > self.max_depth:
                 continue
             handler = {
-                "email": self._run_email_modules,
-                "phone": self._run_phone_modules,
-                "username": self._run_username_modules,
-                "url": self._run_url_modules,
-                "domain": self._run_domain_modules,
+                "email": self._run_lead,
+                "phone": self._run_lead,
+                "username": self._run_lead,
+                "url": self._run_lead,
+                "domain": self._run_lead,
             }.get(lead.type)
             if handler is None:
                 continue
+            stage_no += 1
+            self.leads_processed += 1
+            stage = {
+                "n": stage_no,
+                "type": lead.type,
+                "value": lead.value,
+                "via": lead.via,
+                "source": lead.source,
+                "modules": 0,
+                "findings": 0,
+                "failures": 0,
+                "seconds": 0.0,
+            }
+            before_nodes = len(self.result.nodes)
+            before_leaves = len(self.result.leaves)
+            before_modules = self.modules_run
+            before_failures = self.modules_failed
+            t_stage = time.monotonic()
+            self.emit("stage_start", n=stage_no, type=lead.type, value=lead.value,
+                      depth=lead.depth)
             try:
                 await handler(lead)
             except httpx.HTTPError as exc:
                 # per-module HTTPError layers are caught inside each module itself;
                 # a raw exception slipping out here is recorded, never fatal
                 self.result.errors.append(ModuleError(lead.type, f"engine: {type(exc).__name__}: {exc}"))
+            stage["seconds"] = round(time.monotonic() - t_stage, 2)
+            stage["modules"] = self.modules_run - before_modules
+            stage["failures"] = self.modules_failed - before_failures
+            stage["findings"] = ((len(self.result.nodes) - before_nodes)
+                                 + (len(self.result.leaves) - before_leaves))
+            self.result.meta.setdefault("stages", []).append(stage)
+            self.emit("stage_end", **stage)
 
 
 async def run_scan(
     raw_seeds: str | list[str],
     *,
     fold_plus: bool = False,
-    max_depth: int = 3,
+    max_depth: int = 4,
     wild: bool = False,
     all_sites: bool = False,
     transport: httpx.AsyncBaseTransport | None = None,
     url_log: str | None = None,
     sink=None,
+    on_event=None,
+    time_budget: float | None = None,
+    max_leads: int | None = None,
+    abort=None,
 ) -> ScanResult:
     """Wildfire scan. `transport` is test-only: pass an httpx.MockTransport to
     run the full pipeline against a fixture server instead of the live network.
     `sink` receives live progress/finding events (NullSink when omitted).
-    Accepts one seed (str) or multiple seeds (list) â€” every one becomes a
+    `on_event` receives (kind, data) live events: stage_start / stage_end /
+    module / found / label / stopped - the TUI renders these as the live feed.
+    `time_budget` (seconds) and `max_leads` bound the cascade; when either
+    is hit the run stops cleanly and says so in the report.
+    Accepts one seed (str) or multiple seeds (list) - every one becomes a
     first-class root lead of the graph."""
     import time as _time
     started = _time.perf_counter()
@@ -544,6 +555,10 @@ async def run_scan(
             wild=wild,
             all_sites=all_sites,
             sink=sink,
+            on_event=on_event,
+            time_budget=time_budget,
+            max_leads=max_leads,
+            abort=abort,
         )
         for lead_type, value in seeds:
             engine.sink.expect(_LEAD_UNIT_COST.get(lead_type, 1))

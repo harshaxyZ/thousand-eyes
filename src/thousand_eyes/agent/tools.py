@@ -30,6 +30,7 @@ from urllib.parse import quote, unquote, urlparse
 import httpx
 import yaml
 
+from thousand_eyes import registry
 from thousand_eyes.modules import (
     breach_existence, bluesky_profile, chess_profile, darkweb,
     dockerhub_profile, dns_module, domains, email_checks,
@@ -158,63 +159,32 @@ def _wrap(name: str, family: str, desc: str, inputs: List[str], call):
 
 # ------------------------------------------------------------ engine tools
 
+def _from_spec(spec) -> Tool:
+    """Build an agent tool straight from the registry - one source of truth.
+
+    The deterministic engine and the LLM tool layer therefore always expose
+    exactly the same sources: add a module to registry.py and both paths
+    gain it, with the same fence and the same evidence rules.
+    """
+    from thousand_eyes.registry import Ctx
+
+    arg = spec.inputs[0] if spec.inputs else "seed"
+
+    async def call(client, **kw):
+        value = ""
+        for candidate in kw.values():
+            if isinstance(candidate, str) and candidate:
+                value = candidate
+                break
+        if not value:
+            raise ValueError(f"{spec.tool_name}: no value supplied")
+        return await spec.fn(client, value, Ctx())
+
+    return _wrap(spec.tool_name, "engine", spec.desc or spec.label, [arg], call)
+
+
 ENGINE_TOOLS: List[Tool] = [
-    _wrap("engine.hibp", "engine", "Have I Been Pwned breach existence for an email (keyless)",
-          ["email"], lambda c, email: hibp.run(c, email)),
-    _wrap("engine.xposed", "engine", "XposedOrNot breach existence for an email",
-          ["email"], lambda c, email: breach_existence.run(c, email)),
-    _wrap("engine.hudsonrock", "engine", "Hudson Rock credential-breach exposure for an email",
-          ["email"], lambda c, email: breach_existence.run_hudsonrock(c, email)),
-    _wrap("engine.gravatar", "engine", "Gravatar profile + hash exposure for an email",
-          ["email"], lambda c, email: gravatar.run(c, email)),
-    _wrap("engine.pgp", "engine", "PGP key existence for an email (keyservers)",
-          ["email"], lambda c, email: pgp.run(c, email)),
-    _wrap("engine.github-profile", "engine", "GitHub profile existence + metadata for a username",
-          ["username"], lambda c, username: github_profile.run(c, username)),
-    _wrap("engine.github-commits", "engine", "GitHub commit search by email (public code)",
-          ["email"], lambda c, email: github_commit_search.run(c, email)),
-    _wrap("engine.keybase", "engine", "Keybase signed-proof discovery from a GitHub username",
-          ["username"], lambda c, username: keybase_proofs.run(c, username)),
-    _wrap("engine.reddit", "engine", "Reddit account + activity presence for a username",
-          ["username"], lambda c, username: reddit_user.run(c, username)),
-    _wrap("engine.gitlab", "engine", "GitLab profile existence + metadata for a username",
-          ["username"], lambda c, username: gitlab_profile.run(c, username)),
-    _wrap("engine.mastodon", "engine", "Mastodon (mastodon.social) account lookup for a username",
-          ["username"], lambda c, username: mastodon_lookup.run(c, username)),
-    _wrap("engine.bluesky", "engine", "Bluesky AppView profile lookup for a username",
-          ["username"], lambda c, username: bluesky_profile.run(c, username)),
-    _wrap("engine.hackernews", "engine", "Hacker News (Algolia) account lookup for a username",
-          ["username"], lambda c, username: hackernews_user.run(c, username)),
-    _wrap("engine.dockerhub", "engine", "Docker Hub profile lookup for a username",
-          ["username"], lambda c, username: dockerhub_profile.run(c, username)),
-    _wrap("engine.chess", "engine", "Chess.com public player lookup for a username",
-          ["username"], lambda c, username: chess_profile.run(c, username)),
-    _wrap("engine.sec-headers", "engine", "HTTP security-header posture probe for a url/domain",
-          ["url", "domain"], lambda c, target: security_headers.run(c, target)),
-    _wrap("engine.userrealm", "engine", "UserRealm cross-network presence for an email",
-          ["email"], lambda c, email: userrealm.run(c, email)),
-    _wrap("engine.dns", "engine", "Domain posture: DoH MX + crt.sh + RDAP for the email's domain",
-          ["email"], lambda c, email: dns_module.run(c, email)),
-    _wrap("engine.domain", "engine", "Full domain recon: MX, SPF, crt.sh certs, RDAP",
-          ["domain"], lambda c, domain: domains.run_domain(c, domain)),
-    _wrap("engine.wayback", "engine", "Wayback Machine snapshots for a URL or domain",
-          ["url"], lambda c, url: wayback.run(c, url)),
-    _wrap("engine.fetch", "engine", "Fetch one PUBLIC url (fenced: no .onion, no auth paths)",
-          ["url"], lambda c, url: fetch.run(c, url)),
-    _wrap("engine.email-checks", "engine", "Batch email recon: emailrep, format, MX, gravatar…",
-          ["email"], lambda c, email: email_checks.run(c, email)),
-    _wrap("engine.registration-leaves", "engine",
-          "Registration-leak leaves: where the email address is registered",
-          ["email"], lambda c, email: registration_leaves.run(c, email)),
-    _wrap("engine.username-sweep", "engine",
-          "WhatsMyName dataset sweep: 692-site presence probe, ranked",
-          ["username"], lambda c, username: username_checks.run(c, username, max_sites=120)),
-    _wrap("engine.exact-document", "engine",
-          "Exact-document web spike for a phrase / email / username",
-          ["seed"], lambda c, seed: exact_document.run(c, seed)),
-    _wrap("engine.darkweb-index", "engine",
-          "Ahmia clearnet index of Tor hidden services mentioning the term (index only)",
-          ["term"], lambda c, term: darkweb.run(c, term)),
+    _from_spec(spec) for spec in registry.MODULES
 ]
 
 # ---------------------------------------------------------- search engines
