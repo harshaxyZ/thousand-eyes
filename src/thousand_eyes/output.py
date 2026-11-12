@@ -91,6 +91,30 @@ def _summary_counts(result: ScanResult) -> str:
     return f"{parts} | leaves: {leaves_n} | errors: {errors_n}{dur_part}"
 
 
+def _handle_derived(url: str, handle: str) -> bool:
+    """True when the URL's last path segment IS (or is built from) the
+    operator-typed handle. That proves the account exists on that platform -
+    it does NOT prove the same human runs it."""
+    if not handle:
+        return False
+    tail = url.rstrip("/").rsplit("/", 1)[-1].lower()
+    h = handle.lower()
+    return (tail == h or tail.startswith(h + ".") or tail.startswith(h + "-")
+            or tail.startswith(h + "_") or tail.startswith(h + "%"))
+
+
+def _seed_handle(result: ScanResult) -> str:
+    """The operator-typed handle, when one exists. Used ONLY for the
+    handle-reuse honesty tag - never as a new search key (hard rule #2)."""
+    st = result.seed_type or ""
+    if "username" in st:
+        return result.seed
+    if "url" in st:
+        tail = result.seed.rstrip("/").rsplit("/", 1)[-1]
+        return tail if tail and "." not in tail and "@" not in tail else ""
+    return ""
+
+
 def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.4.0") -> str:
     if verbose:
         return render_verbose(result, version=version)
@@ -98,6 +122,7 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
 
     node_tiers = _classify_nodes(result)
     leaf_tiers = _collect_leaves(result)
+    handle = _seed_handle(result)
 
     if not result.edges and not result.leaves:
         lines.append(f"{result.seed}: ")
@@ -115,13 +140,24 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
         if not node_tiers.get(impact.WEAPONISED) and not leaf_tiers.get(impact.WEAPONISED):
             lines.append("    - none found -")
         lines.append("")
-        lines.append(f"  ▦  ACCOUNTS CONFIRMED - pivot doors into this identity")
+        lines.append(f"  ▦  ACCOUNTS CONFIRMED - pivot doors, with confidence tags")
+        reuse_n = 0
         for ln, _why, _c in node_tiers.get(impact.PIVOTABLE, []):
-            lines.append(f"    {ln}")
+            if handle and _handle_derived(ln.split(": ", 1)[-1], handle):
+                reuse_n += 1
+                lines.append(f"    {ln}  [handle-reuse - same person unconfirmed]")
+            else:
+                lines.append(f"    {ln}  [confirmed]")
         for ln, _why, _c in leaf_tiers.get(impact.PIVOTABLE, []):
             lines.append(f"    {ln}")
         if not node_tiers.get(impact.PIVOTABLE) and not leaf_tiers.get(impact.PIVOTABLE):
             lines.append("    - none found -")
+        if reuse_n > 1:
+            lines.append(
+                f"    note: the handle \"{handle}\" appears on {reuse_n} platforms. "
+                "same handle != same person - platforms with [handle-reuse] tags "
+                "are literally-matching accounts only. corroborate via bio/name/"
+                "avatar overlap or cross-links before attributing them to one identity.")
         amb = node_tiers.get(impact.AMBIENT, []) + leaf_tiers.get(impact.AMBIENT, [])
         lines.append("")
         amb_concise = [ln.split(": ", 1)[1] if ": " in ln else ln[2:] for ln, _w, _c in amb]
@@ -151,7 +187,11 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
 
     if result.errors:
         lines.append("")
-        lines.append(f"  inconclusive ({len(result.errors)} sources responded badly - never a fabricated negative; details in --json)")
+        lines.append(f"  checks that failed ({len(result.errors)}) - inconclusive, never a fabricated negative:")
+        for e in result.errors[:4]:
+            lines.append(f"    · {e.module}: {e.error}")
+        if len(result.errors) > 4:
+            lines.append(f"    · … and {len(result.errors) - 4} more (see --verbose)")
     return "\n".join(lines)
 
 

@@ -15,7 +15,7 @@ Design contract (v1.0):
   * while the agent works, the stream pane shows its CURRENT STEP live
   * every run ends with a structured SUMMARY (analytics + findings)
 
-Commands:  /demo  /clear  /status  /cancel  /help  /exit
+Commands:  /demo  /clear  /setup  /skill  /status  /cancel  /help  /exit
 """
 
 from __future__ import annotations
@@ -150,7 +150,10 @@ CHAT_SYSTEM = (
     "lead: email, username, domain, url or phone. Be terse and concrete: "
     "short sentences, no markdown headers, no emojis, no ANSI codes. Never "
     "fabricate a finding and never claim something is absent - uncertainty "
-    "is INCONCLUSIVE."
+    "is INCONCLUSIVE. Identity rule: the same username on two platforms is "
+    "handle reuse, not proof of one person - never merge accounts without "
+    "corroboration (matching name, bio, avatar or cross-links) and say so "
+    "when you cannot tell."
 )
 
 # --------------------------------------------------------------- step labels
@@ -409,6 +412,11 @@ class ThousandEyesApp(App):
                          "url · phone - and i sweep the public web.")
         self._agent_line("tip: /help lists commands · /demo replays offline · "
                          "!cmd shells out.")
+        try:
+            from thousand_eyes.setup import status_line
+            self._agent_line(status_line())
+        except Exception:
+            pass
 
     # ------------------------------------------------------------- chat log
 
@@ -528,8 +536,49 @@ class ThousandEyesApp(App):
         elif cmd in ("/exit", "/quit"):
             self.action_exit()
             self.exit()
+        elif cmd == "/setup" or cmd.startswith("/setup "):
+            self._do_setup(cmd[6:].strip())
+        elif cmd == "/skill":
+            self._do_skill()
         else:
             self._agent_line(f"unknown command: {cmd} - /help for the list")
+
+    def _do_setup(self, arg: str) -> None:
+        """/setup [<provider> <key>] - guided key onboarding, in-frame."""
+        from thousand_eyes.setup import key_status, save_key, status_line
+        if not arg:
+            self._agent_line(status_line())
+            self._agent_line(
+                "add a key without leaving the console:  /setup gemini <key> "
+                "(free: aistudio.google.com/app/apikey)  or  /setup claude <key>")
+            return
+        parts = arg.split(None, 1)
+        alias = {"gemini": "gemini", "google": "gemini", "claude": "anthropic",
+                 "anthropic": "anthropic"}
+        provider = alias.get(parts[0].lower())
+        if not provider or len(parts) < 2:
+            self._agent_line("usage: /setup gemini <key>  ·  /setup claude <key>")
+            return
+        try:
+            path = save_key(provider, parts[1])
+        except ValueError as exc:
+            self._agent_line(f"not saved: {exc}")
+            return
+        # rebuild the chat client so the new key takes effect instantly
+        self._llm = None
+        provider_now, _k, _src = key_status()
+        self._agent_line(f"key stored ({provider_now}) in {path} - full chat "
+                         "is live. i'll stream answers from here on.")
+
+    def _do_skill(self) -> None:
+        """/skill - install the IDE-agent skill file, idempotent."""
+        from thousand_eyes.skill import install_skill, skill_status
+        written = install_skill()
+        for p in written:
+            self._agent_line(f"skill written: {p}")
+        self._agent_line("restart your IDE session; the agent now knows "
+                         "when and how to drive thousand-eyes. "
+                         f"({skill_status()})")
 
     # ------------------------------------------------------------- chat
 
@@ -738,6 +787,14 @@ class ThousandEyesApp(App):
                     "of canvas/fonts. block third-party cookies, prefer "
                     "reader modes, and remember logins link identities "
                     "across sites anyway.")
+        if "username" in low or "handle" in low or "same name" in low \
+                or "same account" in low or "different person" in low:
+            return ("a matching username on two platforms is handle reuse, "
+                    "not proof of one person. the only solid corroboration is "
+                    "overlapping real name, bio, avatar, location or "
+                    "cross-links between the accounts - so a handle match "
+                    "alone gets tagged unconfirmed. i tag every account that "
+                    "way in the report.")
         if "audit" in low or "check" in low or "scan" in low or "test" in low:
             return ("type a lead and i fire: email (gravatar, breach index, "
                     "github commits, registration leaves, mail posture), "
@@ -914,6 +971,8 @@ class ThousandEyesApp(App):
         self._chat_line("[bold white]commands:[/]")
         for line in ("  /demo      offline synthetic audit replay",
                      "  /clear     wipe the chat",
+                     "  /setup     add or check your LLM key",
+                     "  /skill     install the IDE-agent skill file",
                      "  /status    live analytics for the current run",
                      "  /cancel    stop the running audit",
                      "  /palette   jump to the input palette",
