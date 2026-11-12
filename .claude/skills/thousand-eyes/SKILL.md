@@ -1,6 +1,6 @@
 ---
 name: thousand-eyes
-description: OSINT self-audit — one lead in (email · username · domain · url · phone), an impact-ranked evidence dossier out. Drives the thousand-eyes TUI; read-only, fenced, evidence-only.
+description: OSINT self-audit - one lead in (email · username · domain · url · phone), an impact-ranked evidence dossier out. Drives the thousand-eyes TUI; read-only, fenced, evidence-only.
 ---
 
 # thousand-eyes
@@ -30,5 +30,5 @@ planner executes, model selects. Blocked == inconclusive, never faked.
 
 ## Read-only shell-out
 
-Inside the TUI, prefix any command with `!` — `!git status`,
+Inside the TUI, prefix any command with `!` - `!git status`,
 `!pip show thousand-eyes`. Output lands in the chat pane. Nothing else runs.

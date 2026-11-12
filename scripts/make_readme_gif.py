@@ -1,6 +1,6 @@
 """Render the live banner animation to an animated GIF for the README.
 
-The README can't run JS, so the animation travels as a GIF instead — the
+The README can't run JS, so the animation travels as a GIF instead - the
 real frames, downsampled to terminal-cell resolution, palette-quantised to
 the banner's own violet ramp. Laptop-safe: pure CPU, numpy + stdlib only,
 zero network.
