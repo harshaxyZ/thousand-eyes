@@ -13,6 +13,11 @@ confirmed pivot outwards and ranks what an attacker could do with it.
 1. install the CLI:    pipx install thousand-eyes
 2. install this skill: thousand-eyes skill install
 
+## Bonus
+
+    thousand-eyes-banner --once       # the reactive banner, full animation
+    python -m thousand_eyes.banner    # same thing, module form
+
 ## Drive the TUI
 
     python scripts/tui_chat.py "<lead>"            # one lead, one dossier

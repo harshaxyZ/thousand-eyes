@@ -172,6 +172,10 @@ sources are rendered as inconclusive, never as "not found".
 Gone since v0.4: scripted runs just work; the consent statement stays on
 screen and `--url-log` gives you the full outbound trail.
 
+**Found something that weakens the fence?**
+See `SECURITY.md`: private advisories only, public issues are for evidence
+models and bugs that do not weaken the fence.
+
 ## Tests
 
 ```
