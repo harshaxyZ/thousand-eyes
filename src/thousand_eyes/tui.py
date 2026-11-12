@@ -467,13 +467,14 @@ class ThousandEyesApp(App):
 
     def _status_line(self) -> str:
         """Operator dashboard line: model, budget, last-run numbers."""
-        a = self._planner.analytics if self._planner else None
-        if a is None:
-            return (f"idle · model {self._live_model()} · budget "
-                    f"{self.budget} calls · no run in flight")
-        return (f"running · model {self.model} · wall {_fmt_s(a.elapsed_s())} · "
-                f"tools {a.tool_calls} · tok {a.prompt_tokens + a.completion_tokens} · "
-                f"fetch {a.fetches} · breaches {a.breaches}")
+        if not self._busy:
+            return (f"idle · model {self._live_model()} · cascade budget "
+                    f"{self.budget_seconds}s · no run in flight")
+        elapsed = time.monotonic() - self._run_start
+        return (f"running · model {self._live_model()} · wall {_fmt_s(elapsed)} · "
+                f"stage {self._scan_stats.get('stages', 0)} · modules "
+                f"{self._scan_stats.get('modules', 0)} · findings "
+                f"{self._scan_stats.get('findings', 0)}")
 
     # ------------------------------------------------------------- input
 
@@ -691,21 +692,23 @@ class ThousandEyesApp(App):
                                   "what was found", "recap", "summar")):
             return self._recap()
         if any(k in low for k in ("progress", "status")):
-            if self._planner is not None:
-                sm = self._planner.analytics.summary()
-                return (f"run in flight - {sm.get('tool_calls', 0)} tool calls · "
-                        f"{sm.get('pipelines_fired', 0)} batches · "
-                        f"{sm.get('leads_seen', 0)} leads · ledger "
-                        f"{len(self._planner.ledger)} rows")
-            return "idle. fence armed, zero network. hand me a lead."
+            if self._busy:
+                return (f"run in flight · stage {self._scan_stats.get('stages', 0)} · "
+                        f"modules {self._scan_stats.get('modules', 0)} · findings "
+                        f"{self._scan_stats.get('findings', 0)} · leads "
+                        f"{self._scan_stats.get('leads', 0)}")
+            return "idle. hand me a lead - email · username · domain · url · phone."
         if any(k in low for k in ("report", "dossier", "summary", "summarise", "summarize")):
+            if self._last_result is not None:
+                return self._recap()
             if self._last_report:
                 return self._last_report[-1400:]
             return "no dossier yet - run an audit first (type a lead)."
         if any(k in low for k in ("fence", "safe", "safety", "permission")):
             return ("fence: no .onion resolution · no auth probing · no form submission · "
                     "no password tests · no breach dumps · per-domain 300ms bucket · "
-                    "global concurrency 8 · planner executes, model selects")
+                    "global concurrency 8 · the engine decides what is evidence, "
+                    "the model only narrates it")
         return None
 
     def _live_model(self) -> str:

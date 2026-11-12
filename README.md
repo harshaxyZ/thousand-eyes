@@ -127,6 +127,12 @@ thousand-eyes                     # open the chat console
 the chat picks it up instantly. Without a key the chat still answers - it
 runs on the built-in offline engine, so the tool is never dead weight.
 
+**Completely free, no key, no account:** run a local [ollama](https://ollama.com)
+server (`ollama pull qwen2.5`) and thousand-eyes finds it automatically -
+the LLM then runs on your machine, offline, and nothing leaves it. The
+audit itself never needs an LLM at all: every source is a free, keyless,
+first-party public API.
+
 ## Use
 
 ```
@@ -173,6 +179,9 @@ The default mode stays exactly as it was: no LLM, no key, no network beyond
 the keyless public endpoints.
 
 ## The wildfire model
+
+**Read `docs/PIPELINE.md` for the full flow** - how one lead becomes a
+whole online presence, stage by stage.
 
 | lead type | modules |
 |-----------|---------|
