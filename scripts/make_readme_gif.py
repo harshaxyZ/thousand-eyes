@@ -31,32 +31,19 @@ PALETTE = [
 
 # ---------- helpers: from the banner's own internal arrays ----------
 def _cell_indices(fg: np.ndarray, bg: np.ndarray, bgd: np.ndarray) -> np.ndarray:
-    """Map each cell to a PALETTE index:  fg colour when visible, bg otherwise."""
-    H, W = fg.shape[:2]
-    # fg rows: every entry is a 3-tuple (R,G,B); same for bg
-    # bgd is bool: True => background variant visible
-    idx = np.zeros((H, W), dtype=np.uint8)
-    for r in range(H):
-        for c in range(W):
-            # if bgd[r,c] set => use bg[colour] else fg[colour]
-            if bgd[r, c]:
-                # find nearest palette entry to bg[r,c]
-                bc = tuple(int(x) for x in bg[r, c][:3])
-                best, bd = 10**9, 10**9
-                for i, (pr, pg, pb) in enumerate(PALETTE):
-                    d = (pr - bc[0]) ** 2 + (pg - bc[1]) ** 2 + (pb - bc[2]) ** 2
-                    if d < bd:
-                        bd = d; best = i
-                idx[r, c] = best
-            else:
-                fc = tuple(int(x) for x in fg[r, c][:3])
-                best, bd = 10**9, 10**9
-                for i, (pr, pg, pb) in enumerate(PALETTE):
-                    d = (pr - fc[0]) ** 2 + (pg - fc[1]) ** 2 + (pb - fc[2]) ** 2
-                    if d < bd:
-                        bd = d; best = i
-                idx[r, c] = best
-    return idx
+    """Map each cell to a PALETTE index: fg colour when visible, bg otherwise.
+
+    Vectorised: one argmin over the palette for fg cells and bg cells each,
+    then select - no per-cell python loop.
+    """
+    pal = np.array(PALETTE, np.int32)                     # (P, 3)
+    f = fg[..., :3].astype(np.int32)                     # (H, W, 3)
+    b = bg[..., :3].astype(np.int32)
+    d_f = ((f[..., None, :] - pal[None, None, :, :]) ** 2).sum(-1)   # (H, W, P)
+    d_b = ((b[..., None, :] - pal[None, None, :, :]) ** 2).sum(-1)
+    fg_idx = d_f.argmin(-1)
+    bg_idx = d_b.argmin(-1)
+    return np.where(np.asarray(bgd, bool), bg_idx, fg_idx).astype(np.uint8)
 
 
 # ---------- GIF writer ----------
