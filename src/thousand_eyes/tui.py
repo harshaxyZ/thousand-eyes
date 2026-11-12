@@ -391,6 +391,8 @@ class ThousandEyesApp(App):
                          "safety, OSINT.")
         self._agent_line("audit: hand me a lead - email · username · domain · "
                          "url · phone.")
+        self._agent_line("tip: /help lists commands · /demo replays offline · "
+                         "!cmd shells out.")
 
     # ------------------------------------------------------------- chat log
 
@@ -809,8 +811,10 @@ class ThousandEyesApp(App):
                      "  /clear     wipe the chat",
                      "  /status    live analytics for the current run",
                      "  /cancel    stop the running audit",
+                     "  /palette   jump to the input palette",
                      "  /help      this list",
                      "  /exit      quit",
+                     "  !cmd       run a shell command (!pip list)",
                      "",
                      "  chat: ask anything about footprint / privacy / OSINT",
                      "  audit: hand me a lead - email · username · domain · "
