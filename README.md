@@ -1,38 +1,41 @@
-# thousand-eyes 🔥 wildfire edition (v0.5)
+# thousand-eyes (v0.6) · wildfire edition
 
+**one lead in: an impact-ranked evidence dossier out.**
 
-![thousand-eyes banner - animated](readme_banner.gif)
+<p align="center">
+  <img src="readme_banner.gif" alt="thousand-eyes reactive banner: the eye tracks the cursor, glare sweeps the letters">
+</p>
 
-```
-▀▅▅▅▅▅▅▄▂▀▖▁   ▗▄▖ ▊▄▅▅▅▖▁ ▛▀▁   ▊▄▜  ▀▅▅▅▅▅▜  ▛▅▅▅▄▂ ▗▄▖    ▛▄▁▄▅▅▅▅▀▜      ▁▀▅▅▅▅▅▅▄▂▀▖▁   ▗▄▖▛▅▅▅▅▅▅▄▜ ▁▀▅▅▅▅▀▖
-▆▃▃▜▗▅▃▃▃▎▊▐   ▌▃▎▅▆▅▃▃▃▖▆▜▎▃▊   ▊▃▌▗▆▆▃▃▃▃▃▃▛▆▆▃▃▃▃▆▅▊▅▇▅▖  ▎▊▊▃▗▅▃▃▃▜▅▖    ▊▘▗▅▃▃▃▃▃▃▎▊▐   ▌▃▎▎▛▅▃▃▃▃▃▃▗▆▆▃▃▃▃▃▃▘
-   ▎▟▊   ▎▊▐▁▁▁▟▌▎▎▘▊   ▊▄▐▎▌▊   ▊▌▌▙▁▁▁▁▁▁  ▌▙▝▁▁▁▂▟▊▊▄▄▁▊▁ ▎▟▊▌▐▎   ▎▌▊    ▊▄▝▐▁▁▁   ▇▄▁▀▂▇▟▛▅▎▟▊▁▁▁▁  ▎▁▊▁▁▁▁
-   ▎▊▊   ▎▅▂▂▄▂▁▅▎▎▊▊   ▊▐▐▎▘▊   ▊▗▐▎▆▃▂▂▂▘▃▂▌▅▂▂▄▂▂▗▊▊▐▐▅▃▝▃▎▊▊▗▌▎   ▎▘▊    ▊▅▛▄▂▂▀▙▖   ▇▎▟▊▆▇ ▎▛▀▂▂▄▙▖  ▆▃▂▄▂▝▃▁
-   ▎▌▊   ▎▊▗▇▇▇▐▌▎▎▌▊   ▊▐▌▌▌▊   ▊▐▌▎  ▇▇▇▇▌▊▘▌▎▆▇▇▇▎▊▊▌▐▎ ▌▂▅▃▊▊▌▎   ▎▌▊    ▊▌▊▗▇▇▇▇     ▎▐▊   ▎▝▊▇▇▇▇     ▇▇▇▊▌▐▎
-   ▎▟▊   ▎▊▐   ▐▌▎▆▃▅▆▆▆▆▅▃▆▃▆▆▅▆▆▅▂▛▅▆▅▆▆▆▅▂▖▌▎▎   ▎▊▊▂▐▎ ▇▄▂▂▌▟▇▆▆▆▆▞▂▃    ▊▁▃▆▆▆▅▆▅▂   ▎▎▊   ▎▂▝▆▆▆▆▅▜▛▅▆▆▅▆▆▅▂▘
-   ▇▀▘   ▇▀▘    ▆▀  ▆▀▄▄▄▘   ▆▄▄▄▄▘ ▇▅▄▄▄▄▄▟  ▆▀    ▇▄▘▆▀▟   ▇▄▘▆▄▄▄▄▄▀▟      ▆▄▄▄▄▄▄▄▄   ▇▅▘   ▇▄▄▄▄▄▄▄▀▇▅▄▄▄▄▄▘
-                                  O P E N - S O U R C E   I N T E L L I G E N C E
-                             S E E   E V E R Y T H I N G .   M I S S   N O T H I N G .
-```
+<p align="center"><b>OPEN-SOURCE INTELLIGENCE · SEE EVERYTHING. MISS NOTHING.</b></p>
 
-> the art above is the real thing - `python scripts/make_readme_gif.py` re-renders
-> it from the live banner (eyes track the cursor, glare sweeps the letters).
+An OSINT self-audit CLI that thinks like an attacker: you feed it identifiers
+you own (email, username, phone, URL, domain), it walks every confirmed pivot
+outwards: platform accounts, breach exposure, PGP keys, archives, darkweb
+index mentions, mail infrastructure. Then it prints what an attacker could
+actually DO with it, in ranked order, every line carrying live proof.
 
-One lead in → an impact-ranked evidence dossier out. An OSINT self-audit CLI
-that thinks like an attacker: you feed it identifiers you own (email,
-username, phone, URL), it walks every confirmed pivot outwards - platform
-accounts, breach exposure, PGP keys, archives, darkweb index mentions, mail
-infrastructure - then prints what an attacker could actually DO with it,
-in ranked order, every line carrying live proof.
+## What you get
 
 ```
-✜  WEAPONISED - identity keys an attacker starts here
-   ✜ name: …  ·  ✜ second email: …  ·  ✖ stealer-log hits
-▦  ACCOUNTS CONFIRMED - pivot doors into this identity
-   ▦ github.com/...  ·  ▦ twitter.com/...  ·  ✖ Collection1 (2019-01-07)
-·  ambient footprint - archives, infra, index mentions
-counts · manual next-steps · skipped/inconclusive (never faked silent)
+✜  WEAPONISED: identity keys an attacker starts here
+   ✜ name: ✔  ✜ second email: ✔  ✜ stealer-log hits
+▦  ACCOUNTS CONFIRMED: pivot doors into this identity
+   ▦ github.com/...  ✔  ▦ twitter.com/...  ✔  ✜ Collection1 (2019-01-07)
+✔  ambient footprint: archives, infra, index mentions
+counts ✔ manual next-steps ✔ skipped/inconclusive (never faked silent)
 ```
+
+- **Evidence only.** Every row carries its source, the request that produced
+  it and a quotable snippet. Blocked sources stay *inconclusive*; nothing is
+  ever silently reported as "not found".
+- **Fenced by code, not by prompt.** No password-reset flows, no credential
+  probing, no broker APIs, no breach-dump pulls, no `.onion` resolution. The
+  LLM planner cannot bypass any of it: it only *selects* tools; the
+  deterministic SafeClient executes them.
+- **Reactive banner.** `thousand-eyes` opens with a high-resolution terminal
+  banner (quadrant-block renderer, ~3px edge steps): the eye blinks, tracks
+  the glare sweep, letters decode in. Same art in the chat TUI, rendered
+  straight from the scene's frame arrays.
 
 ## Install (one command)
 
@@ -45,36 +48,33 @@ npm i -g thousand-eyes            # node wrapper around the same python CLI
 thousand-eyes you@example.com     # identical output to the pip install
 ```
 
-The npm package is a thin wrapper: it locates your installed
-`thousand-eyes` python package and runs its console script. The python
-package itself still needs `pipx install thousand-eyes` (or pip) first.
-Publishing the npm package is a manual step - `npm publish` with your
-token; the files are in `package.json` + `bin/`.
+The npm package is a thin wrapper: it locates your installed `thousand-eyes`
+python package and runs its console script. Publishing the npm package is a
+manual step (`npm publish`); the files are in `package.json` + `bin/`.
 
-Dependencies (`httpx`, `pyyaml`, `rich`) install automatically. Nothing
-beyond those three reaches your machine; `numpy` is only used by the optional
-startup banner. Every dependency follows the repo's 3-phase verification gate
-(see `research/dependency-gate-3phase.md`).
+Dependencies (`httpx`, `pyyaml`, `rich`) install automatically. `numpy` is
+only used by the optional startup banner. Every dependency follows the
+repo's 3-phase verification gate (see `research/dependency-gate-3phase.md`).
 
 ## Use
 
 ```
-thousand-eyes                               # violet chat console + live HUD
-thousand-eyes you@example.com                 # polite evidence walk
-thousand-eyes you@example.com --full          # WILDFIRE: full 692-site sweep + derived handles + wider caps
-thousand-eyes harsha1218_ --full              # usernames work too (no email needed)
+thousand-eyes                               # violet chat console + live HUD (the TUI)
+thousand-eyes you@example.com               # polite evidence walk
+thousand-eyes you@example.com --full        # WILDFIRE: full 692-site sweep + derived handles
+thousand-eyes harsha1218_ --full            # usernames work too (no email needed)
 thousand-eyes you@example.com --json report.json --html report.html --dot graph.dot
-thousand-eyes you@example.com --demo          # offline synthetic replay (venue-safe)
-thousand-eyes you@example.com --url-log urls.log    # full outbound-URL transparency
-thousand-eyes --agent you@example.com         # agentic mode (LLM-planned, see below)
+thousand-eyes you@example.com --demo        # offline synthetic replay (venue-safe)
+thousand-eyes you@example.com --url-log urls.log   # full outbound-URL transparency
+thousand-eyes --agent you@example.com       # agentic mode (LLM-planned, see below)
 thousand-eyes --demo --agent you@example.com  # agent mode, offline synthetic replay
 ```
 
 - Default mode never invents usernames. `--full` opts into wildfire: bigger
   reach, punctuation variants of your own local-part, complete WMN stroll
-  (derived handles still get the polite sweep so a full run stays ~3 min).
-- The interactive CONFIRM gate is GONE in v0.4 - scripted runs just work
-  while the consent statement banner stays.
+  (derived handles still get the polite sweep, so a full run stays ~3 min).
+- The interactive CONFIRM gate is gone since v0.4: scripted runs just work
+  while the consent statement stays on screen.
 - Live cockpit: while scanning you get a real progress bar + ETA + streaming
   ranked findings (rich). Non-tty runs print clean reports only.
 
@@ -84,18 +84,16 @@ thousand-eyes --demo --agent you@example.com  # agent mode, offline synthetic re
 thousand-eyes --agent you@example.com --json agent.json --html dossier.html
 ```
 
-An LLM planner (Google Gemini **flash-lite** - free tier, ~no API key cost)
-picks which fenced tool families to fire each round, audits what's still
-"dark", pivots on discovered leads, and writes the final markdown dossier.
+An LLM planner (Google Gemini flash-lite: free tier, ~no API key cost) picks
+which fenced tool families to fire each round, audits what's still "dark",
+pivots on discovered leads, and writes the final markdown dossier.
 
 - Key: set `GEMINI_API_KEY`, or save it to `~/.gemini/api-key` (one line).
-  The planner falls back to OpenRouter's free flash-lite tier if
-  `OPENROUTER_API_KEY` is set instead.
-- Fence is unchanged: the LLM *selects* tools; the deterministic SafeClient
-  still executes them. No onion resolution, no auth probing, no breach dumps
-  - the LLM can't bypass any of it.
+  Falls back to OpenRouter's free flash-lite tier if `OPENROUTER_API_KEY` is
+  set instead.
+- Fence is unchanged: no onion resolution, no auth probing, no breach dumps.
 - `--agent-budget N` caps LLM calls (default 120); `--model` overrides the
-  model (defaults to `gemini-3.5-flash-lite`).
+  model.
 - `--demo --agent` replays the synthetic fixture with zero network calls.
 
 The default mode stays exactly as it was: no LLM, no key, no network beyond
@@ -116,49 +114,60 @@ spawn-cap bands close. The graph remains reproducible and quotable:
 `--json` has every edge's source/evidence/snippet; `--html` renders the
 ranked radial graph as a standalone zero-asset file.
 
-## Impact ranking (the hacker POV)
+## Impact ranking (the attacker POV)
 
 | glyph | tier | meaning |
 |-------|------|---------|
-| ✜ | weaponised | real names, second emails, phone numbers, stealer-log hits - the keys that unlock people-search, docs, SIM attacks |
-| ▦ | pivot doors | confirmed platform accounts and breach records - profiles an attacker visits to harvest bio/contact/graph |
-| · | ambient | archives, mail infra, darknet index mentions - context, not doorways |
-
-Blocked and ambiguous responses stay **inconclusive** - the report shows how
-many sources responded badly and why, never pretending "not found".
+| ✜ | weaponised | real names, second emails, phone numbers, stealer-log hits: the keys that unlock people-search, docs, SIM attacks |
+| ▦ | pivot doors | confirmed platform accounts and breach records: profiles an attacker visits to harvest bio/contact/graph |
+| · | ambient | archives, mail infra, darknet index mentions: context, not doorways |
 
 ## Hard rules (enforced in code)
 
 1. Pivots must be confirmed by the response body itself.
 2. No password-reset flows, no credential probing, no login-wall brute.
-3. No broker APIs, no breach-dump pulls - existence checks only.
-4. No spam engines / no fake-account generation.
-5. Politeness caps: per-type spawn caps, sweep concurrency + stagger,
-   one request per site per lead, darknet searches capped.
-6. `--url-log` writes every outbound URL (audit any run: a --full sweep ≈ 735
-   requests in ~3.5 min - measured live 2026-11-04).
-7. Missing keys never read as a clean bill - they render as `skipped` rows.
-8. Everything that could go wrong in a demo is a `--demo` run on synthetic
-   fixtures - zero sockets in either direction.
+3. No broker APIs, no breach-dump pulls: existence checks only.
+4. No spam engines, no fake-account generation.
+5. Politeness caps: per-type spawn caps, sweep concurrency + stagger, one
+   request per site per lead, darknet searches capped.
+6. `--url-log` writes every outbound URL (audit any run: a `--full` sweep is
+   ~735 requests in ~3.5 min, measured live 2026-11-04).
+7. Missing keys never read as a clean bill: they render as `skipped` rows.
+8. Anything that could go wrong in a demo is a `--demo` run on synthetic
+   fixtures: zero sockets in either direction.
 
-## Dependency gate (supply-chain defense)
+## The banner, as a library
 
-Anything new entering the environment passes 3 phases before use -
-provenance (canonical PyPI project + maintainer + license + dependency
-review), sandboxed install (venv-scoped, pinned ranges), smoke + full test
-suite. Protocol + verdicts: `research/dependency-gate-3phase.md`.
+The reactive banner is plain python: render one frame, get typed arrays of
+glyphs + colors, or print the whole animation.
+
+```python
+from thousand_eyes.banner import Scene, frame_to_text, show_banner
+
+scene = Scene(150)                     # fits 150 columns, shrinks automatically
+glyphs, fg, bg, bg_default = scene.final_frame()
+print(frame_to_text(scene.final_frame()))   # static frame with truecolor ANSI
+show_banner(loops=1)                        # full animation, plays once
+```
 
 ## Tests
 
 ```
-.venv/Scripts/python -m pytest -q     # 43 passed, 1 skipped (numpy-optional banner)
+py -3 -m pytest -q                    # 43 passed, 1 skipped (numpy-optional banner)
 ```
+
+## Dependency gate (supply-chain defense)
+
+Anything new entering the environment passes 3 phases before use:
+provenance (canonical PyPI project + maintainer + license + dependency
+review), sandboxed install (venv-scoped, pinned ranges), smoke + full test
+suite. Protocol + verdicts: `research/dependency-gate-3phase.md`.
 
 ## Attribution
 
-`src/thousand_eyes/data/wmn_data.json` - WhatsMyName dataset by WebBreacher
-& the OSINT community, CC-BY-SA 4.0; snapshot taken 2026-11-03. Our checking
-engine is independent code; dataset license details in
+`src/thousand_eyes/data/wmn_data.json` is the WhatsMyName dataset by
+WebBreacher and the OSINT community, CC-BY-SA 4.0; snapshot taken
+2026-11-03. Our checking engine is independent code; license details in
 `src/thousand_eyes/data/ATTRIBUTION-WhatsMyName.md`.
 
 Darknet mentions come from Ahmia's public clearnet index (one GET per term;
