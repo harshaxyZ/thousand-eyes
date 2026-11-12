@@ -29,7 +29,7 @@ SKILL_DIR = Path(".claude/skills/thousand-eyes")
 SKILL_MD = """\
 ---
 name: thousand-eyes
-description: OSINT self-audit — one lead in (email · username · domain · url · phone), an impact-ranked evidence dossier out. Drives the thousand-eyes TUI; read-only, fenced, evidence-only.
+description: OSINT self-audit - one lead in (email · username · domain · url · phone), an impact-ranked evidence dossier out. Drives the thousand-eyes TUI; read-only, fenced, evidence-only.
 ---
 
 # thousand-eyes
@@ -59,7 +59,7 @@ planner executes, model selects. Blocked == inconclusive, never faked.
 
 ## Read-only shell-out
 
-Inside the TUI, prefix any command with `!` — `!git status`,
+Inside the TUI, prefix any command with `!` - `!git status`,
 `!pip show thousand-eyes`. Output lands in the chat pane. Nothing else runs.
 """
 
@@ -68,7 +68,7 @@ TUI_CHAT_PY = '''\
 
 Usage:  python scripts/tui_chat.py "<lead>" [--demo] [--timeout S]
 
-Why a pty: the TUI is a Textual app — it renders to a terminal, not to a
+Why a pty: the TUI is a Textual app - it renders to a terminal, not to a
 pipe. A pty gives it a real terminal (size, keys, redraw) while we read the
 scrollback for the [ SUMMARY ] block the run ends with.
 """
@@ -194,7 +194,7 @@ def uninstall() -> Tuple[int, List[str]]:
     """Remove exactly what install wrote. Returns (rc, lines)."""
     target = _root() / SKILL_DIR
     if not target.exists():
-        return 0, ["skill not present — nothing to remove"]
+        return 0, ["skill not present - nothing to remove"]
     shutil.rmtree(target)
     return 0, [f"removed {target}"]
 

@@ -4,12 +4,12 @@ Classifies lead input. Accepted types:
   - email (lowercased; plus-tag stripped ONLY when --fold-plus is passed)
   - E.164 phone
   - https:// URL
-  - username — USER-ASSERTED lead (the operator typed it; that is the
+  - username - USER-ASSERTED lead (the operator typed it; that is the
     evidence chain: it was never derived from something else by us)
 
 v0.3 accepts multiple leads per run; this module stays per-lead. It never
 derives a username, real name, or phone from an email local-part on its own
-— username candidates are only created by explicit user input, or by the
+- username candidates are only created by explicit user input, or by the
 opt-in --wild permutation mode.
 """
 
@@ -55,7 +55,7 @@ def normalise_seed(raw: str, *, fold_plus: bool = False) -> Seed:
 
     # username gate: any bare handle the operator typed deliberately.
     # URLs/emails/phones are all matched above, so what falls through here to
-    # the username regex is exactly "a word that looks like a handle" — that
+    # the username regex is exactly "a word that looks like a handle" - that
     # is user-asserted input, not a derivation.
     if _USERNAME_RE.match(raw) and not raw.isdigit():
         return Seed(type="username", value=raw)

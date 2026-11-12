@@ -1,17 +1,17 @@
-"""impact.py — v0.4 "hacker's triage".
+"""impact.py - v0.4 "hacker's triage".
 
 Every graph finding is ranked into one of three impact tiers before it is
 shown. The rank answers one question: *if someone knew this, what could they
 actually do with it?*
 
-  tier 3  WEAPONISED  — identity keys: real name, second email, live phone,
+  tier 3  WEAPONISED  - identity keys: real name, second email, live phone,
                         stealer-log hits (credential theft victims list).
-  tier 2  PIVOTABLE   — accounts on real platforms. Knowing the handle, an
+  tier 2  PIVOTABLE   - accounts on real platforms. Knowing the handle, an
                         attacker can visit the profile, harvest the bio /
                         contact info, and pivot to the next platform. This
                         is the hacker POV you asked about: a Pinterest or
-                        Spotify account is not noise — it is a doorway.
-  tier 1  AMBIENT     — footprints that confirm activity but give an
+                        Spotify account is not noise - it is a doorway.
+  tier 1  AMBIENT     - footprints that confirm activity but give an
                         attacker little: archive snapshots, mail infra,
                         generic domain posture, misc indexed pages.
 
@@ -55,34 +55,34 @@ _TYPE_BASE = {
 # a real pivot opportunity (bio, email, phone, social graph) outrank sites
 # where the profile is anonymous card-content.
 _HIGH_VALUE_HOSTS: dict[str, str] = {
-    "github.com": "code identity — commit emails, repos, orgs",
-    "keybase.io": "keybase — proves cross-platform identity",
-    "www.reddit.com": "reddit — account history, social graph",
-    "reddit.com": "reddit — account history, social graph",
-    "twitter.com": "X/Twitter — public account",
-    "x.com": "X/Twitter — public account",
-    "mobile.twitter.com": "X/Twitter — public account",
-    "www.instagram.com": "instagram — bio, contact linking",
-    "instagram.com": "instagram — bio, contact linking",
-    "www.pinterest.com": "pinterest — bio + linked accounts",
-    "pinterest.com": "pinterest — bio + linked accounts",
-    "open.spotify.com": "spotify — listening identity, connections",
-    "soundcloud.com": "soundcloud — public identity",
-    "www.twitch.tv": "twitch — identity + streaming life",
-    "twitch.tv": "twitch — identity + streaming life",
-    "www.tiktok.com": "tiktok — public identity",
-    "bsky.app": "bluesky — DID-resolvable public account",
-    "mastodon.social": "mastodon — fediverse identity",
-    "medium.com": "medium — writing identity",
-    "www.youtube.com": "youtube — channel identity",
-    "youtube.com": "youtube — channel identity",
-    "about.me": "about.me — self-authored identity card",
-    "www.wattpad.com": "wattpad — author identity",
-    "www.goodreads.com": "goodreads — reading identity",
-    "www.roblox.com": "roblox — young-audience identity",
-    "www.flickr.com": "flickr — photo identity (EXIF-era legacy)",
-    "news.ycombinator.com": "hackernews — long-lived pseudonymous history",
-    "www.paypal.com": "paypal — money rails (existence signal)",
+    "github.com": "code identity - commit emails, repos, orgs",
+    "keybase.io": "keybase - proves cross-platform identity",
+    "www.reddit.com": "reddit - account history, social graph",
+    "reddit.com": "reddit - account history, social graph",
+    "twitter.com": "X/Twitter - public account",
+    "x.com": "X/Twitter - public account",
+    "mobile.twitter.com": "X/Twitter - public account",
+    "www.instagram.com": "instagram - bio, contact linking",
+    "instagram.com": "instagram - bio, contact linking",
+    "www.pinterest.com": "pinterest - bio + linked accounts",
+    "pinterest.com": "pinterest - bio + linked accounts",
+    "open.spotify.com": "spotify - listening identity, connections",
+    "soundcloud.com": "soundcloud - public identity",
+    "www.twitch.tv": "twitch - identity + streaming life",
+    "twitch.tv": "twitch - identity + streaming life",
+    "www.tiktok.com": "tiktok - public identity",
+    "bsky.app": "bluesky - DID-resolvable public account",
+    "mastodon.social": "mastodon - fediverse identity",
+    "medium.com": "medium - writing identity",
+    "www.youtube.com": "youtube - channel identity",
+    "youtube.com": "youtube - channel identity",
+    "about.me": "about.me - self-authored identity card",
+    "www.wattpad.com": "wattpad - author identity",
+    "www.goodreads.com": "goodreads - reading identity",
+    "www.roblox.com": "roblox - young-audience identity",
+    "www.flickr.com": "flickr - photo identity (EXIF-era legacy)",
+    "news.ycombinator.com": "hackernews - long-lived pseudonymous history",
+    "www.paypal.com": "paypal - money rails (existence signal)",
     "cash.app": "money rails (existence signal)",
     "venmo.com": "money rails (public payment feed)",
 }
@@ -96,8 +96,8 @@ _LOW_VALUE_HOST_PREFIXES = (
 
 # Leaf site label prefixes → tier/classification for leaf rows.
 _LEAF_RULES: tuple[tuple[str, int, str], ...] = (
-    ("stealer log", WEAPONISED, "infostealer log entry — machine shows stored credentials for this identity"),
-    ("breach", PIVOTABLE, "breach exposure — attacker knows this account exists in a dump"),
+    ("stealer log", WEAPONISED, "infostealer log entry - machine shows stored credentials for this identity"),
+    ("breach", PIVOTABLE, "breach exposure - attacker knows this account exists in a dump"),
     ("darknet", AMBIENT, "darknet-indexed mention"),
     ("mail inf", AMBIENT, "mail infrastructure"),
 )
@@ -132,18 +132,18 @@ def pivot_tier(node_type: str, value: str, category: str = "", label: str = "") 
     tier = classify_host(value)
     if tier == PIVOTABLE:
         host_key = urlparse(value).hostname or "" if "://" in value else value.lower()
-        why = _HIGH_VALUE_HOSTS.get(host_key.lower(), "live profile page — a pivot doorway")
+        why = _HIGH_VALUE_HOSTS.get(host_key.lower(), "live profile page - a pivot doorway")
         if not why.endswith("doorway"):
             return PIVOTABLE, why
-        return PIVOTABLE, f"{site or 'platform'} profile — attacker can harvest bio/links from here"
+        return PIVOTABLE, f"{site or 'platform'} profile - attacker can harvest bio/links from here"
     return AMBIENT, "secondary footprint"
 
 
 def _TYPE_WHY(node_type: str) -> str:
     return {
-        "name": "real name — the master key for people-search and docs",
-        "email": "second email — direct pivot into other accounts",
-        "phone": "phone number — SIM-swap/OSSINT surface",
+        "name": "real name - the master key for people-search and docs",
+        "email": "second email - direct pivot into other accounts",
+        "phone": "phone number - SIM-swap/OSSINT surface",
         "handle": "username leaked in an adjacent record",
         "domain": "mail/tenant posture observed",
     }[node_type]
@@ -156,11 +156,11 @@ def leaf_tier(site_label: str, category: str = "") -> tuple[int, str]:
         if low.startswith(prefix):
             return tier, why
     if category == "breach" or "breach" in low:
-        return PIVOTABLE, "breach exposure — the attacker has this account in a dump"
+        return PIVOTABLE, "breach exposure - the attacker has this account in a dump"
     if category == "darknet":
         return AMBIENT, "darknet-indexed mention"
     # consumer registration check (duolingo-style account-exists leaf)
-    return PIVOTABLE, "account exists — attacker can attempt resets/contact on this service"
+    return PIVOTABLE, "account exists - attacker can attempt resets/contact on this service"
 
 
 def rank_url_like(value: str) -> str:

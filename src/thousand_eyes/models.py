@@ -6,7 +6,7 @@ Two node classes only, per spec:
   - leaf: a response only said "registered" / "not registered". Leaves are
     never searched again.
 
-An edge exists only when "source A returned identifier B" — never because
+An edge exists only when "source A returned identifier B" - never because
 two strings look similar. Every edge must carry source, evidence_url, and
 the exact snippet that justified it.
 """
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 
 def normalise_value(node_type: str, value: str) -> str:
-    """Normalisation used purely for dedup keys — never for inventing links."""
+    """Normalisation used purely for dedup keys - never for inventing links."""
     if node_type in ("email", "domain", "handle"):
         return value.strip().lower()
     if node_type == "url":
@@ -34,7 +34,7 @@ class Node:
     value: str
     pivot: bool  # True = pivot, False = leaf
     # v0.4 presentation metadata (NOT part of the dedup key and NOT in
-    # to_dict — graph evidence semantics stay unchanged):
+    # to_dict - graph evidence semantics stay unchanged):
     label: str = ""      # human platform name, e.g. "Instagram"
     category: str = ""   # site category, e.g. "social", "dev", "gaming"
 
@@ -132,7 +132,7 @@ class ScanResult:
 
     def add_node(self, node: Node) -> Node:
         """Add a node, deduping on (type, normalised value). First write wins
-        for the pivot/leaf flag — a node already known as a pivot stays a
+        for the pivot/leaf flag - a node already known as a pivot stays a
         pivot even if later re-observed as a leaf-ish mention."""
         key = node.key()
         existing = self.nodes.get(key)
@@ -144,7 +144,7 @@ class ScanResult:
         return node
 
     def add_edge(self, from_value: str, to_value: str, source: str, evidence_url: str, snippet: str, status: int | None = None) -> bool:
-        """One edge per (from, to, source) — the pair is case/dedup-normalised so
+        """One edge per (from, to, source) - the pair is case/dedup-normalised so
         the same discovery from two response variants collapses instead of
         duplicating the graph (bug fix: previously every repeat discovery
         appended a duplicate edge)."""
@@ -158,7 +158,7 @@ class ScanResult:
     _leaf_seen: set[tuple[str, str]] = field(default_factory=set)
 
     def append_leaf(self, site: str, url: str, status: int | None = None, category: str = "") -> bool:
-        """v0.4: leaves are headline material — show every record ONCE.
+        """v0.4: leaves are headline material - show every record ONCE.
         Dedup key (category, site-label): the same breach found for two of
         the subject's emails is one headline, not two rows. url = first
         proven evidence retained."""

@@ -138,7 +138,7 @@ def _wild_candidates(local: str) -> list[str]:
 
 def _darkweb_with_note(engine: "_Engine", term: str) -> dict:
     """darkweb.run wrapper that converts the module's inconclusive 'note'
-    (anti-scrape landing page) into a skipped-row instead of an error —
+    (anti-scrape landing page) into a skipped-row instead of an error -
     the honest middle between 'no mentions' and 'blocked'."""
     return _run_darkweb(engine, term)
 
@@ -363,7 +363,7 @@ class _Engine:
             _record(self.result, label, res)
             self.take(lead, res.get("pivots") or [])
         self._stage(f"username[{username}] â†’ platform sweep (WMN)")
-        # derived handles (wild permutations) get the polite 120-site sweep —
+        # derived handles (wild permutations) get the polite 120-site sweep -
         # only the operator-typed handle earns the full 692-site stroll
         derived = lead.source.startswith('wild:')
         res_sweep = await username_checks.run(self.client, username, all_sites=self.all_sites and not derived, sink=self.sink)

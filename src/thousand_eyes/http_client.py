@@ -13,7 +13,7 @@ DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 def new_client(transport: httpx.AsyncBaseTransport | None = None, url_log_path: str | None = None) -> httpx.AsyncClient:
     """`transport` is overridden by tests with an httpx.MockTransport so the
     full module pipeline runs against a fixture, never the live network.
-    `url_log_path` (--url-log) appends every outbound URL to a file — the
+    `url_log_path` (--url-log) appends every outbound URL to a file - the
     full-request-transparency safety check reads exactly that log."""
     hooks = None
     if url_log_path:
