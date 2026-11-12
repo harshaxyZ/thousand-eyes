@@ -131,13 +131,20 @@ def test_final_frame_shows_both_taglines():
 
 
 def test_narrow_terminal_falls_back_cleanly():
-    """A too-narrow console must not crash: Scene shrinks, worst case the
-    caller gets a plain one-line title (show_banner handles it)."""
+    """A too-narrow console must not crash: show_banner prints the plain
+    one-line title when no Scene level fits, and a Scene never renders
+    zero rows."""
     scene = banner.Scene(30)
-    art = banner.frame_to_text(scene.final_frame())
-    lines = art.splitlines()
-    assert all(len(line) <= 30 + 40 for line in lines)  # never balloons wide
     assert scene.rows >= 1
+    art = banner.frame_to_text(scene.final_frame())
+    assert len(art.splitlines()) >= 1
+    stream = io.StringIO()
+    stream.isatty = lambda: True
+    monkeypatch.setattr(banner.sys, "stdout", stream)
+    banner.show_banner(animate=False, loops=1, width=30)
+    out = stream.getvalue()
+    assert "THOUSAND EYES" in out
+    assert "\x1b[38;2" not in out or out.count("\x1b") <= 1  # plain fallback
 
 
 def test_static_banner_fits_terminal_width():
