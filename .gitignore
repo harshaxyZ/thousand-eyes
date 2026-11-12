@@ -1,14 +1,18 @@
+# generated artifacts
+*_report.json
+urls.log
+demo_report.json
+live_report.json
+
+# python
 __pycache__/
-*.py[cod]
+*.pyc
 *.egg-info/
 build/
 dist/
-.venv/
-.venv-demo/
-demo_fixtures/
-urls.log
-report.json
-graph.dot
-*.pyc
 .pytest_cache/
+.venv/
+
+# session scratch
 .session_extract/
+*.bundle
