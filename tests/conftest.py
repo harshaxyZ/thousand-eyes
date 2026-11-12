@@ -54,6 +54,22 @@ def transport(router: FixtureRouter) -> httpx.MockTransport:
 
 
 @pytest.fixture(autouse=True)
+def _stable_loop_policy():
+    """Pin one asyncio loop policy for the whole session.
+
+    pytest-asyncio's per-test policy restore churns deprecated default-policy
+    APIs on Python 3.14 and intermittently leaves the next App.run_test()
+    with a torn-down loop (QueryError on a healthy app). One stable policy
+    for the session removes the race without touching test semantics."""
+    import asyncio
+    import sys
+
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_live_keys(monkeypatch):
     """Every test runs with zero API keys configured unless it explicitly
     sets one -- a stray key in the real environment must never make a test
