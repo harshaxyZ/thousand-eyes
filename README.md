@@ -179,7 +179,7 @@ models and bugs that do not weaken the fence.
 ## Tests
 
 ```
-py -3 -m pytest -q                    # 43 passed, 1 skipped (numpy-optional banner)
+py -3 -m pytest -q                    # 104 passed
 ```
 
 ## Dependency gate (supply-chain defense)
