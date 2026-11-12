@@ -1,4 +1,4 @@
-"""pgp — keys.openpgp.org vks lookup, keyless (verified 2026-11-03).
+"""pgp - keys.openpgp.org vks lookup, keyless (verified 2026-11-03).
 
   GET https://keys.openpgp.org/vks/v1/by-email/<email>
   → 200 armored key body = the email is anchored to a real PGP key

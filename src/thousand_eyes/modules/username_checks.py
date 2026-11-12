@@ -1,19 +1,19 @@
 """username-sweep module (v0.3 wildfire core).
 
-Reads the bundled WhatsMyName dataset (CC-BY-SA 4.0 — see
+Reads the bundled WhatsMyName dataset (CC-BY-SA 4.0 - see
 data/ATTRIBUTION-WhatsMyName.md) and runs OUR OWN single-GET interpretation
-of each site's check rule — none of the WMN tool code is imported.
+of each site's check rule - none of the WMN tool code is imported.
 
 Verdict per site, mirroring the tool's own marker philosophy (same safety
 net as our registration leaves):
   claimed    = response matches the e_code AND no contradicting e_string
   unclaimed  = f_code/f_string matched (or the marker philosophy says absent)
   ambiguous  = anything else ("both markers", "neither") → dropped silently,
-               never reported as a finding — a stale or wrong dataset entry
+               never reported as a finding - a stale or wrong dataset entry
                can therefore never manufacture a false positive.
 
 A confirmed profile URL becomes a url pivot (type "url"), which the caller
-may enqueue for a fetch at the next depth — that is the wildfire spread.
+may enqueue for a fetch at the next depth - that is the wildfire spread.
 
 --wild (all sites) vs default: dataset sites are ordered but capped at
 DEFAULT_MAX_SITES per username for runtime politeness; the order is stable
@@ -75,7 +75,7 @@ def normalize_placeholder(uri: str) -> str | None:
     if _PLACEHOLDER_RE.search(uri):
         return _PLACEHOLDER_RE.sub(_PLACEHOLDER_TOKEN, uri)
     if "{" not in uri and "}" not in uri:
-        return uri  # no placeholder at all — not usable for a username probe
+        return uri  # no placeholder at all - not usable for a username probe
     return None
 
 

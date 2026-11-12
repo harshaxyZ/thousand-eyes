@@ -2,7 +2,7 @@
 
 Only runs against a URL that an earlier module already returned as
 evidence AND that parses as exactly https://github.com/<username> (profile
-root — not a repo, gist, or org sub-path). Never derives a username by
+root - not a repo, gist, or org sub-path). Never derives a username by
 guessing or from the email local-part (hard rule #2); the caller only
 calls run() with a username pulled from an already-evidence-backed URL via
 extract_github_username()'s strict regex.
@@ -10,7 +10,7 @@ extract_github_username()'s strict regex.
 Calls GitHub's public, unauthenticated REST user endpoint (60 req/hr/IP,
 higher with an optional GITHUB_TOKEN) and reports only fields the API
 actually returned: real name, personal blog/website URL, Twitter handle,
-and public email — each a literal account-API fact, never a guess. A 404
+and public email - each a literal account-API fact, never a guess. A 404
 means the account doesn't exist (silence, not an error). A 403/429 is a
 rate limit and must be reported as an error, never collapsed into "nothing
 found" (hard rule #7).
@@ -36,7 +36,7 @@ _GITHUB_PROFILE_URL_RE = re.compile(
 def extract_github_username(url: str) -> str | None:
     """Returns a username only if `url` is exactly a GitHub profile root
     URL. Returns None for anything else (repo/gist/org paths, other
-    hosts) — this is a strict parse of an already-confirmed evidence URL,
+    hosts) - this is a strict parse of an already-confirmed evidence URL,
     never a guess."""
     match = _GITHUB_PROFILE_URL_RE.match(url.strip())
     return match.group(1) if match else None

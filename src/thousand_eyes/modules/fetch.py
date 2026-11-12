@@ -2,7 +2,7 @@
 
 GET only URLs discovered in steps 2-4 (gravatar, exact-document, hibp),
 same strict extraction rules as exact-document. No further crawling beyond
-depth 2 — the caller controls depth, this module just does one GET + one
+depth 2 - the caller controls depth, this module just does one GET + one
 extraction pass per URL.
 """
 
@@ -20,7 +20,7 @@ async def run(client: httpx.AsyncClient, url: str) -> dict:
     """Returns {"pivots": [...], "error": str|None}.
 
     Fetches `url` once and extracts https URLs / emails / E.164 phones found
-    on the page. Does not re-fetch or follow anything further — depth
+    on the page. Does not re-fetch or follow anything further - depth
     control lives in the caller (scan.py).
     """
     try:

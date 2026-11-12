@@ -1,9 +1,9 @@
-"""Module 6: dns — email-domain posture (v0.3 delegates to the domains engine).
+"""Module 6: dns - email-domain posture (v0.3 delegates to the domains engine).
 
 Only runs when the email domain is NOT a free mailbox provider. MX records
 via DNS-over-HTTPS, certificate-transparency hostnames via crt.sh (flaky,
 degraded not fatal), and the RDAP registration record. Everything is
-reported as a "mail infrastructure" side list — never as identity pivots.
+reported as a "mail infrastructure" side list - never as identity pivots.
 """
 
 from __future__ import annotations

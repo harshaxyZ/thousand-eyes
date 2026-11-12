@@ -1,4 +1,4 @@
-"""userrealm — Microsoft's own sign-in routing endpoint, keyless.
+"""userrealm - Microsoft's own sign-in routing endpoint, keyless.
 
 GET https://login.microsoftonline.com/common/userrealm/<email>?api-version=1.0
 Verified live (2026-11-03): 200 JSON for any email, e.g.
@@ -6,7 +6,7 @@ Verified live (2026-11-03): 200 JSON for any email, e.g.
   or {"account_type":"Federated","domain_name":"example.com",
       "federation_protocol":"WSTrust", ...}
 
-This is the endpoint Azure AD itself uses to decide where a login goes —
+This is the endpoint Azure AD itself uses to decide where a login goes -
 no key, no login attempt, read-only. Findings:
   - account_type Managed + tenant domain → the mailbox lives on an M365 tenant
   - consumer domains (outlook/hotmail/live) → consumer Microsoft account

@@ -2,13 +2,13 @@
 
 Only runs against a GitHub username already confirmed by github_profile.py
 (itself only reachable from an already-evidence-backed github.com/<user>
-URL pivot) — never a locally-derived guess from the email local-part
+URL pivot) - never a locally-derived guess from the email local-part
 (hard rule #2).
 
 Calls Keybase's public, keyless proof-lookup API
 (keybase.io/_/api/1.0/user/lookup.json?github=<user>). Keybase proofs are
 cryptographically signed by the user's own Keybase key and independently
-checkable at each proof's own `proof_url`/`human_url` — this is a
+checkable at each proof's own `proof_url`/`human_url` - this is a
 verification mechanism, not a guess: we only report a pivot when Keybase's
 own API says a specific proof is in state 1 (accepted/live), and every
 pivot's evidence_url is the proof's own checkable URL, never Keybase's

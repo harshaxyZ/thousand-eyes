@@ -2,7 +2,7 @@
 
 MD5 of the trimmed lowercase email. GET the profile json. A 200 with a
 display name or a list of accounts is a pivot. A 404 is silence, not an
-error — Gravatar's 404 for an unregistered hash is expected, routine
+error - Gravatar's 404 for an unregistered hash is expected, routine
 behaviour, not a failure of the request.
 """
 
@@ -69,7 +69,7 @@ async def run(client: httpx.AsyncClient, email: str) -> dict:
                 })
 
     if not pivots:
-        # 200 with no usable identifiers is still a confirmed profile — but
+        # 200 with no usable identifiers is still a confirmed profile - but
         # per hard rule #1 (no evidence, no line) we don't invent a finding
         # from an empty entry list.
         return {"pivots": [], "error": None}

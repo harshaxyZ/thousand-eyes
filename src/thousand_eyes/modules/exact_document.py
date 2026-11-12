@@ -1,13 +1,13 @@
-"""Module 3: exact-document — v0.3 (the "public mentions" spike).
+"""Module 3: exact-document - v0.3 (the "public mentions" spike).
 
 Search only for the QUOTED exact seed, using the first available provider:
 
-  1. bing-html  (KEYLESS, default)  — Bing web results with a browser UA;
+  1. bing-html  (KEYLESS, default)  - Bing web results with a browser UA;
        result links are decoded from Bing's u=a1<base64url> redirect form.
-  2. serper     (SERPER_API_KEY)    — Google-index via serper.dev (2,500
-       free credits, no card) — great demo insurance.
-  3. brave      (BRAVE_API_KEY)     — official search API.
-  4. google_cse (GOOGLE_CSE_API_KEY + GOOGLE_CSE_ID) — legacy (EOL Jan-2027).
+  2. serper     (SERPER_API_KEY)    - Google-index via serper.dev (2,500
+       free credits, no card) - great demo insurance.
+  3. brave      (BRAVE_API_KEY)     - official search API.
+  4. google_cse (GOOGLE_CSE_API_KEY + GOOGLE_CSE_ID) - legacy (EOL Jan-2027).
 
 A hit is a pivot only if the LIVE page body still contains the exact seed
 (hard rule #1). From that body we extract only https URLs, emails and

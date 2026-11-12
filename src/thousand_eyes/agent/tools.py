@@ -1,4 +1,4 @@
-"""The Thousand Eyes instrument panel — 150+ read-only OSINT tools.
+"""The Thousand Eyes instrument panel - 150+ read-only OSINT tools.
 
 Families:
   engine.*    wraps of the proven v0.4 wildfire modules (evidence-only)
@@ -147,7 +147,7 @@ def _wrap(name: str, family: str, desc: str, inputs: List[str], call):
             findings = _flatten(out)
             summary = out.get("summary") or out.get("note") or json.dumps(out)[:200]
             return _result(name, call, t0, True, str(summary)[:400], findings)
-        except Exception as exc:  # noqa: BLE001 — record, never crash the run
+        except Exception as exc:  # noqa: BLE001 - record, never crash the run
             return _result(name, call, t0, False, "", [],
                            error=f"{type(exc).__name__}: {exc}"[:200])
     return Tool(name=name, family=family, desc=desc, inputs=inputs, fn=fn)
@@ -303,7 +303,7 @@ def _dork_tool(kind: str) -> Tool:
                                  "source": f"dork.{kind}", "evidence_url": h["url"],
                                  "snippet": h.get("snippet", ""),
                                  "title": h.get("title", ""), "query": query})
-            except Exception:  # noqa: BLE001 — one dead engine never kills the dork
+            except Exception:  # noqa: BLE001 - one dead engine never kills the dork
                 continue
         seen, uniq = set(), []
         for r in rows:
@@ -352,7 +352,7 @@ async def _ahmia(client: SafeClient, term: str) -> ToolResult:
 DARK_TOOLS: List[Tool] = [
     Tool(name="dark.ahmia-index", family="dark",
          desc="Ahmia clearnet index of Tor hidden services mentioning the term. "
-              "Index presence ONLY — the harness never fetches .onion hosts.",
+              "Index presence ONLY - the harness never fetches .onion hosts.",
          inputs=["term"], fn=_ahmia),
     Tool(name="dark.paste-index", family="dark",
          desc="Clear-net paste-index presence (pastebin/ghostbin/github.io) for a term.",

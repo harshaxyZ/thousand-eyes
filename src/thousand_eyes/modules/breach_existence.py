@@ -1,12 +1,12 @@
-"""breach-existence — the keyless "is my email in public leaks" layer.
+"""breach-existence - the keyless "is my email in public leaks" layer.
 
 Primary (keyless, verified live 2026-11-03):
   GET https://api.xposedornot.com/v1/check-email/<email>
   → clean:    {"Error":"Not found","email":null}
-  → exposed:  {"breaches_details":{...}, ...}  (breach NAMES only — this is
+  → exposed:  {"breaches_details":{...}, ...}  (breach NAMES only - this is
     existence-attribution, never dump contents)
 
-Optional (key): Hudson Rock stealer-log check — free API key from
+Optional (key): Hudson Rock stealer-log check - free API key from
 hudsonrock.com; the endpoint shape is only shipable when HUDSON_API_KEY
 is set, so it degrades to skip rather than guess a URL.
 """
@@ -26,7 +26,7 @@ XON_URL = "https://api.xposedornot.com/v1/check-email/{email}"
 async def run(client: httpx.AsyncClient, email: str) -> dict:
     """Returns {"pivots": [...], "leaves": [...], "error": str|None}.
 
-    A confirmed breach hit is a LEAF (site=breach-name, evidence=url) — it
+    A confirmed breach hit is a LEAF (site=breach-name, evidence=url) - it
     confirms existence, it is not a new identifier to expand.
     """
     url = XON_URL.format(email=email)
@@ -62,7 +62,7 @@ async def run_hudsonrock(client: httpx.AsyncClient, email: str) -> dict:
     invalid key must surface as an error, never as a clean bill (hard rule #7)."""
     key = os.environ.get("HUDSON_API_KEY")
     if not key:
-        # NOTE: no MODULE prefix here — _record adds the module label itself
+        # NOTE: no MODULE prefix here - _record adds the module label itself
         return {"pivots": [], "leaves": [], "error": None, "skipped": "no HUDSON_API_KEY set (stealer-log check stays a manual browser step)"}
     url = "https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email"
     try:
