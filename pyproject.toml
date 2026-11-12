@@ -39,7 +39,7 @@ dependencies = [
 banner = ["numpy>=1.26,<3"]   # animated startup banner only; scans never touch it
 dev = [
     "pytest==8.3.3",
-    "pytest-asyncio==0.24.0",
+    "pytest-asyncio==1.4.1.post1",
 ]
 
 [project.scripts]
