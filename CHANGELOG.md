@@ -23,8 +23,15 @@
   prompt and the chat brain follow the same rule.
 - Failures are first-class: a "checks that failed" section lists every
   errored source with its real reason, instead of a single inconclusive
-  footnote. The HTTP layer takes one conservative connect-level retry
-  (never on 429, never re-issuing a request that reached a server).
+  footnote. A "source coverage" line reports how many checks actually
+  answered (and flags thin coverage as a finding in itself). The HTTP layer
+  takes one conservative connect-level retry (never on 429, never
+  re-issuing a request that reached a server).
+- `thousand-eyes --doctor`: machine readiness in one command - runtime,
+  install location, optional deps, LLM key, IDE skill and a live
+  reachability probe of five keyless endpoints.
+- Bug fix found by a live run: chess.com returns `joined` as a unix
+  timestamp int (not a string) - the module now normalises both forms.
 - Four more keyless sources: Hacker News (Algolia), Docker Hub,
   Chess.com, and a first-party HTTP security-header posture probe for the
   operator's own url/domain lead.

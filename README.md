@@ -43,7 +43,12 @@ counts ✔ manual next-steps ✔ skipped/inconclusive (never faked silent)
   two different people, and the tool says so.
 - **Failures are visible.** A source that errors, times out or rate-limits
   shows up in a "checks that failed" section with the real reason - never
-  laundered into a clean-looking negative.
+  laundered into a clean-looking negative. A "source coverage" line reports
+  how many checks actually answered, and flags thin coverage as a finding
+  in itself.
+- **`--doctor` checks the machine end to end**: python, install location,
+  optional deps, LLM key, IDE skill, and a live reachability probe of five
+  keyless endpoints.
 - **Fenced by code, not by prompt.** No password-reset flows, no credential
   probing, no broker APIs, no breach-dump pulls, no `.onion` resolution. The
   LLM planner cannot bypass any of it: it only *selects* tools; the
@@ -103,6 +108,7 @@ the first-party public endpoints it audits.
 ```bash
 thousand-eyes --setup             # pick a provider, paste a key (gemini free tier or claude)
 thousand-eyes --skill install     # teach your IDE agent (Claude Code, ...) how to drive the tool
+thousand-eyes --doctor            # is this machine ready? runtime, deps, key, skill, endpoint reachability
 thousand-eyes                     # open the chat console
 ```
 
@@ -231,7 +237,7 @@ models and bugs that do not weaken the fence.
 ## Tests
 
 ```
-py -3 -m pytest -q                    # 121 passed
+py -3 -m pytest -q                    # 125 passed
 ```
 
 ## Dependency gate (supply-chain defense)
