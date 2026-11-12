@@ -21,11 +21,18 @@ def new_client(transport: httpx.AsyncBaseTransport | None = None, url_log_path: 
             with open(url_log_path, "a", encoding="utf-8") as fh:
                 fh.write(str(request.url) + "\n")
         hooks = {"request": [_log]}
+    # ONE conservative connect-level retry on the default transport: absorbs
+    # transient DNS/TCP flakes on real networks without ever re-issuing a
+    # request that already reached a server (no brute-force-shaped traffic).
+    # Rate limits (429) are never retried - they surface as honest errors.
+    inner = transport
+    if inner is None:
+        inner = httpx.AsyncHTTPTransport(retries=1)
     return httpx.AsyncClient(
         headers={"User-Agent": USER_AGENT},
         timeout=DEFAULT_TIMEOUT,
         follow_redirects=True,
-        transport=transport,
+        transport=inner,
         event_hooks=hooks,
     )
 

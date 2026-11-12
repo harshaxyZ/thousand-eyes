@@ -47,7 +47,9 @@ from thousand_eyes.models import NULL_SINK, Leaf, ModuleError, Node, ScanResult,
 from thousand_eyes.modules import (
     breach_existence,
     bluesky_profile,
+    chess_profile,
     darkweb,
+    dockerhub_profile,
     domains,
     email_checks,
     exact_document,
@@ -56,11 +58,13 @@ from thousand_eyes.modules import (
     github_profile,
     gitlab_profile,
     gravatar,
+    hackernews_user,
     hibp,
     keybase_proofs,
     mastodon_lookup,
     pgp,
     registration_leaves,
+    security_headers,
     username_checks,
     userrealm,
     wayback,
@@ -235,6 +239,17 @@ class _Engine:
         """Turn a module's pivot dicts into graph nodes/edges + new leads."""
         for p in pivots:
             t, v = p["type"], p["value"]
+            if t == "fact":
+                # observed facts (account age, posture rows) are evidence
+                # nodes but never expandable and never re-classified
+                node = Node(type="fact", value=v, pivot=False)
+                self.result.add_node(node)
+                self.result.add_edge(
+                    from_value=lead.value, to_value=v, source=p["source"],
+                    evidence_url=p["evidence_url"], snippet=p["snippet"], status=p.get("status"),
+                )
+                self._finding(_AMBIENT_TIER, "fact", v)
+                continue
             if t == "name":
                 # names are evidence nodes but never expandable
                 node = Node(type="name", value=v, pivot=False)
@@ -364,6 +379,12 @@ class _Engine:
         self.sink.bump()
         res_bsky = await bluesky_profile.run(self.client, username)
         self.sink.bump()
+        res_hn = await hackernews_user.run(self.client, username)
+        self.sink.bump()
+        res_dh = await dockerhub_profile.run(self.client, username)
+        self.sink.bump()
+        res_chess = await chess_profile.run(self.client, username)
+        self.sink.bump()
         for label, res in (
             ("github-profile", res_gh),
             ("keybase-proofs", res_kb),
@@ -371,6 +392,9 @@ class _Engine:
             ("reddit-user", res_reddit),
             ("mastodon-lookup", res_mast),
             ("bluesky-profile", res_bsky),
+            ("hackernews-user", res_hn),
+            ("dockerhub-profile", res_dh),
+            ("chess-profile", res_chess),
         ):
             _record(self.result, label, res)
             self.take(lead, res.get("pivots") or [])
@@ -415,6 +439,15 @@ class _Engine:
         _record(self.result, "wayback", res_wmb)
         self.take(lead, res_wmb.get("pivots") or [])
 
+        # posture probe: only for the operator's OWN lead (depth 0). Running
+        # it on every spawned pivot buries the dossier in header noise.
+        if lead.depth == 0:
+            self._stage(f"url[{url[:60]}] → security headers")
+            res_sh = await security_headers.run(self.client, url)
+            self.sink.bump()
+            _record(self.result, "security-headers", res_sh)
+            self.take(lead, res_sh.get("pivots") or [])
+
     async def _run_domain_modules(self, lead: Lead) -> None:
         self._stage(f"domain[{lead.value}] â†’ posture")
         res = await domains.run_domain(self.client, lead.value)
@@ -424,6 +457,14 @@ class _Engine:
         for host in res.get("hosts") or []:
             if self.result.append_leaf(f"mail infrastructure: {host['value']}", host["evidence_url"], None, "infrastructure"):
                 self._finding(_AMBIENT_TIER, "infra", host["value"])
+
+        # posture probe: seed domains only (see the url path for the why)
+        if lead.depth == 0:
+            self._stage(f"domain[{lead.value}] → security headers")
+            res_sh = await security_headers.run(self.client, lead.value)
+            self.sink.bump()
+            _record(self.result, "security-headers", res_sh)
+            self.take(lead, res_sh.get("pivots") or [])
 
     async def run(self, seeds: list[tuple[str, str]]) -> None:
         for lead_type, value in seeds:

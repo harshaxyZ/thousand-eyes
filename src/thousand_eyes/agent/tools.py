@@ -31,10 +31,12 @@ import httpx
 import yaml
 
 from thousand_eyes.modules import (
-    breach_existence, bluesky_profile, darkweb, dns_module, domains, email_checks,
+    breach_existence, bluesky_profile, chess_profile, darkweb,
+    dockerhub_profile, dns_module, domains, email_checks,
     exact_document, fetch, github_commit_search, github_profile, gitlab_profile,
-    gravatar, hibp, keybase_proofs, mastodon_lookup, pgp, reddit_user,
-    registration_leaves, username_checks, userrealm, wayback,
+    gravatar, hackernews_user, hibp, keybase_proofs, mastodon_lookup, pgp,
+    reddit_user, registration_leaves, security_headers, username_checks,
+    userrealm, wayback,
 )
 
 # ------------------------------------------------------------------- types
@@ -181,6 +183,14 @@ ENGINE_TOOLS: List[Tool] = [
           ["username"], lambda c, username: mastodon_lookup.run(c, username)),
     _wrap("engine.bluesky", "engine", "Bluesky AppView profile lookup for a username",
           ["username"], lambda c, username: bluesky_profile.run(c, username)),
+    _wrap("engine.hackernews", "engine", "Hacker News (Algolia) account lookup for a username",
+          ["username"], lambda c, username: hackernews_user.run(c, username)),
+    _wrap("engine.dockerhub", "engine", "Docker Hub profile lookup for a username",
+          ["username"], lambda c, username: dockerhub_profile.run(c, username)),
+    _wrap("engine.chess", "engine", "Chess.com public player lookup for a username",
+          ["username"], lambda c, username: chess_profile.run(c, username)),
+    _wrap("engine.sec-headers", "engine", "HTTP security-header posture probe for a url/domain",
+          ["url", "domain"], lambda c, target: security_headers.run(c, target)),
     _wrap("engine.userrealm", "engine", "UserRealm cross-network presence for an email",
           ["email"], lambda c, email: userrealm.run(c, email)),
     _wrap("engine.dns", "engine", "Domain posture: DoH MX + crt.sh + RDAP for the email's domain",

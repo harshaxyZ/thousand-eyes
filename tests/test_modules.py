@@ -8,8 +8,10 @@ import hashlib
 
 import httpx
 
-from thousand_eyes.modules import (bluesky_profile, dns_module, gitlab_profile,
-                                    hibp, mastodon_lookup)
+from thousand_eyes.modules import (bluesky_profile, chess_profile, dns_module,
+                                    dockerhub_profile, gitlab_profile, hibp,
+                                    hackernews_user, mastodon_lookup,
+                                    security_headers)
 from thousand_eyes.scan import run_scan
 
 FIXTURE_EMAIL = "fixture.subject@example.org"
@@ -181,3 +183,65 @@ async def test_bluesky_profile_confirms_and_error_payload_is_silence(router, tra
     async with httpx.AsyncClient(transport=transport) as client:
         res = await bluesky_profile.run(client, "missing-handle")
     assert res["error"] is None and res["pivots"] == []
+
+
+HN_HIT = {"username": "fixturehandle", "karma": 1420, "about": "fixture bio"}
+
+DOCKER_HIT = {"orgname": "fixturehandle", "full_name": "Fix Ture",
+              "date_joined": "2020-06-01T00:00:00.000Z", "type": "User"}
+
+CHESS_HIT = {"player_id": 42, "name": "Fix Ture", "url": "https://www.chess.com/member/fixturehandle",
+             "joined": "2018-03-03"}
+
+
+async def test_hackernews_user_confirms(router, transport):
+    router.add_host_path("hn.algolia.com", "/api/v1/users/fixturehandle",
+                         httpx.Response(200, json=HN_HIT))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await hackernews_user.run(client, "fixturehandle")
+    assert res["error"] is None
+    assert any(p["value"] == "https://news.ycombinator.com/user?id=fixturehandle"
+               for p in res["pivots"])
+    assert any("karma 1420" in p["value"] for p in res["pivots"])
+
+    router.add_host_path("hn.algolia.com", "/api/v1/users/missing-handle",
+                         httpx.Response(404, json={"error": "not found"}))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await hackernews_user.run(client, "missing-handle")
+    assert res["error"] is None and res["pivots"] == []
+
+
+async def test_dockerhub_profile_confirms(router, transport):
+    router.add_host_path("hub.docker.com", "/v2/users/fixturehandle",
+                         httpx.Response(200, json=DOCKER_HIT))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await dockerhub_profile.run(client, "fixturehandle")
+    assert res["error"] is None
+    assert any(p["type"] == "name" and p["value"] == "Fix Ture"
+               for p in res["pivots"])
+    assert any("created 2020-06-01" in p["value"] for p in res["pivots"])
+
+
+async def test_chess_profile_confirms(router, transport):
+    router.add_host_path("api.chess.com", "/pub/player/fixturehandle",
+                         httpx.Response(200, json=CHESS_HIT))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await chess_profile.run(client, "fixturehandle")
+    assert res["error"] is None
+    assert any(p["value"] == "https://www.chess.com/member/fixturehandle"
+               for p in res["pivots"])
+    assert any(p["type"] == "name" for p in res["pivots"])
+
+
+async def test_security_headers_reports_present_and_missing(router, transport):
+    router.add_host_path("fixture.example", "/",
+                         httpx.Response(200, headers={
+                             "strict-transport-security": "max-age=31536000",
+                         }, json={}))
+    async with httpx.AsyncClient(transport=transport) as client:
+        res = await security_headers.run(client, "fixture.example")
+    assert res["error"] is None
+    assert any("sets strict-transport-security" in p["value"] for p in res["pivots"])
+    assert any("lacks content-security-policy" in p["value"] for p in res["pivots"])
+    summary = [p for p in res["pivots"] if "security headers:" in p["value"]]
+    assert summary and "1/6" in summary[0]["value"]
