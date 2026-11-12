@@ -1,11 +1,11 @@
-"""live.py — the scanner cockpit (v0.4).
+"""live.py - the scanner cockpit (v0.4).
 
 Renders, WHILE the wildfire walks the graph:
   - one overall progress bar with a real ETA (units = module/site probes,
     announced up-front by the engine and extended as spawned leads grow);
   - a stage line showing exactly which module/lead is burning right now;
   - a rolling finding feed: high-impact results print AS THEY LAND, not at
-    the end (the movie-montage effect) — ranked glyphs:
+    the end (the movie-montage effect) - ranked glyphs:
        ✜ = weaponised identity key (name / email / phone / stealer log)
        ▦ = pivotable platform account
        · = ambient footprint
@@ -13,7 +13,7 @@ Renders, WHILE the wildfire walks the graph:
 Non-TTY (pipes, CI, --no-banner) → silent no-op sink; nothing is written
 while scanning, so logs stay clean.
 
-Dependencies: rich is OPTIONAL at runtime here — if missing, the module
+Dependencies: rich is OPTIONAL at runtime here - if missing, the module
 falls back to the null sink (the CLI still prints the final ranked report).
 """
 

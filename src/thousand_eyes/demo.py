@@ -1,7 +1,7 @@
 """--demo mode: a fully offline fixture transport.
 
 `thousand-eyes --demo <seeds>` replays canned SYNTHETIC responses through
-httpx.MockTransport — no socket is opened in either direction. Everything
+httpx.MockTransport - no socket is opened in either direction. Everything
 keyless is exercised (gravatar, twitter availability, userrealm, breach
 existence, pgp, github commit search + profile + keybase, reddit,
 wayback, DNS/MX/crt.sh/RDAP, duolingo leaf, WMN username sweep via
@@ -108,7 +108,7 @@ def demo_transport() -> httpx.MockTransport:
 
         if url.host == "github.com" and url.path == f"/{DEMO_USER}":
             return _pitch(
-                "<html><body>Demo Subject — contact me at "
+                "<html><body>Demo Subject - contact me at "
                 f"{DEMO_EMAIL} or {DEMO_USER} on instagram. "
                 "I also post at https://mastodon.social/@demosubject "
                 "and https://demo.subject.dev"
@@ -122,7 +122,7 @@ def demo_transport() -> httpx.MockTransport:
 
         if url.host == "mastodon.social" and url.path == "/@demosubject":
             return _pitch(
-                f"<html><body>Demo Subject (@demosubject) — email {DEMO_EMAIL}"
+                f"<html><body>Demo Subject (@demosubject) - email {DEMO_EMAIL}"
                 "</body></html>"
             )
 
@@ -163,7 +163,7 @@ def demo_transport() -> httpx.MockTransport:
                 "</li></ol></body></html>"
             )
 
-        # every unknown route behaves like "nothing here" — ambiguous, dropped
+        # every unknown route behaves like "nothing here" - ambiguous, dropped
         return httpx.Response(404, text="")
 
     return httpx.MockTransport(handler)

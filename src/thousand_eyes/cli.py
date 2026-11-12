@@ -1,4 +1,4 @@
-"""thousand-eyes — wildfire self-audit CLI (v0.5).
+"""thousand-eyes - wildfire self-audit CLI (v0.5).
 
 Impact-ranked, evidence-only lead-driven pivot graph. Default mode is LLM-free
 and keyless; `--agent` adds an LLM-planned pipeline (Gemini flash-lite, free
@@ -30,22 +30,22 @@ from thousand_eyes.output import render_dot, render_json, render_text
 from thousand_eyes.scan import run_scan
 
 DISCLAIMER = """\
-thousand-eyes v{v} — public-data self-audit (wildfire edition)
+thousand-eyes v{v} - public-data self-audit (wildfire edition)
   * reads only PUBLIC, keyless, first-party endpoints (gravatar, github,
     twitter availability, microsoft userrealm, xposedornot, keys.openpgp,
     web.archive, python, reddit .json, crt.sh/DNS, bing html, ahmia index,
     WhatsMyName dataset)
-  * built for identifiers you own or have the owner's consent to scan —
+  * built for identifiers you own or have the owner's consent to scan -
     scanning third parties stays your responsibility
   * no password-reset probing, no credential checks, no breach dumps,
-    no broker APIs, no following .onion links — enforced in code
+    no broker APIs, no following .onion links - enforced in code
 """
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="thousand-eyes",
-        description="Wildfire self-audit CLI — one lead in, an evidence-ranked web of public proof out.",
+        description="Wildfire self-audit CLI - one lead in, an evidence-ranked web of public proof out.",
         epilog="Self-audit: scan identifiers you own or are authorized to review.",
     )
     parser.add_argument("targets", nargs="*", help="one or more leads: email, E.164 phone, https URL, or username")
@@ -94,7 +94,7 @@ def _run_agent(args: argparse.Namespace, transport=None) -> int:
     async def show(ev):  # mirror planner events onto stderr / live cockpit
         kind, data = ev
         if kind == "round":
-            print(f"agent: depth {data.get('depth')} — {data.get('tools')} tools, "
+            print(f"agent: depth {data.get('depth')} - {data.get('tools')} tools, "
                   f"ledger {data.get('ledger')} rows", file=sys.stderr)
         elif kind == "tool":
             print(f"tool: {data.get('name')} ok={data.get('ok')}", file=sys.stderr)
@@ -133,7 +133,7 @@ def _run_agent(args: argparse.Namespace, transport=None) -> int:
     wall = time.monotonic() - start
 
     if args.demo:
-        report = "*** DEMO MODE — SYNTHETIC fixture replay, zero network calls ***\n\n" + report
+        report = "*** DEMO MODE - SYNTHETIC fixture replay, zero network calls ***\n\n" + report
     print(report)
     if args.json:
         import json as _json
@@ -152,7 +152,7 @@ def _run_agent(args: argparse.Namespace, transport=None) -> int:
 
 
 def print_banner() -> None:
-    """Play the intro once and stamp the version line — tty only. In
+    """Play the intro once and stamp the version line - tty only. In
     non-tty runs (pipes/CI) print_banner prints NOTHING; the ranked report
     itself carries 'THOUSAND EYES vX' in its header anyway."""
     if not sys.stdout.isatty():
@@ -169,7 +169,7 @@ def print_banner() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     # Windows consoles default to cp1252 and choke on the ranked-report
-    # glyphs — force utf-8 with a lenient error handler so output never dies.
+    # glyphs - force utf-8 with a lenient error handler so output never dies.
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         print(DISCLAIMER.format(v=__version__))
     args = parser.parse_args(args_list)
 
-    # bare `thousand-eyes` — the purple chat TUI
+    # bare `thousand-eyes` - the purple chat TUI
     if not args.targets and not any(
             a in args_list for a in ("--agent", "--demo", "--json", "--html", "--dot",
                                      "--url-log", "--help", "-h")):
@@ -254,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
 
     text = render_text(result_obj, verbose=args.verbose, version=__version__)
     if args.demo:
-        text = "*** DEMO MODE — SYNTHETIC fixture replay, zero network calls ***\n\n" + text
+        text = "*** DEMO MODE - SYNTHETIC fixture replay, zero network calls ***\n\n" + text
     print(text)
 
     if args.json:

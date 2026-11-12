@@ -1,8 +1,8 @@
-"""html_report.py — the one-file dossier (v0.4).
+"""html_report.py - the one-file dossier (v0.4).
 
 Standalone HTML artifact: header, summary stats, the evidence graph drawn
 as pure inline SVG (radial layout by impact tier), node tables, leaf tables
-and the raw edge list. Zero external assets — no CDN, no fonts, no JS —
+and the raw edge list. Zero external assets - no CDN, no fonts, no JS -
 so the file is safe to open anywhere and cannot phone home.
 
 Graph classification reuses the CLI's impact ranking.
@@ -18,9 +18,9 @@ from thousand_eyes import impact
 from thousand_eyes.models import Node, ScanResult
 
 _TIER_COLORS = {
-    impact.WEAPONISED: "#e5484d",   # red   — weaponised identity keys
-    impact.PIVOTABLE: "#b46eff",    # violet— pivotable platform accounts
-    impact.AMBIENT: "#8a8f98",      # grey — ambient footprints
+    impact.WEAPONISED: "#e5484d",   # red   - weaponised identity keys
+    impact.PIVOTABLE: "#b46eff",    # violet- pivotable platform accounts
+    impact.AMBIENT: "#8a8f98",      # grey - ambient footprints
 }
 _TIER_NAMES = {
     impact.WEAPONISED: "weaponised identity keys",
@@ -172,7 +172,7 @@ def render_html(result: ScanResult, version: str = "0.4.0") -> str:
             f"{_esc(_short(n.value, 96))}</a></td>"
             f"<td class='dim'>{_esc(n.label or '')}</td></tr>"
             for n in buckets[imp]
-        ) or "<tr><td class='dim'>—</td></tr>"
+        ) or "<tr><td class='dim'>-</td></tr>"
         sections.append(
             f"<h3 style='color:{_TIER_COLORS[imp]}'>■ {_TIER_NAMES[imp]}"
             f"<span class='count'> ({len(buckets[imp])})</span></h3>"
@@ -184,7 +184,7 @@ def render_html(result: ScanResult, version: str = "0.4.0") -> str:
         f"<td class='mono'>{_esc(_short(l.site, 110))}</td>"
         f"<td class='dim'><a href='{_esc(l.url)}'>evidence</a></td></tr>"
         for l in sorted(result.leaves, key=lambda x: (x.category, x.site))
-    ) or "<tr><td class='dim'>—</td></tr>"
+    ) or "<tr><td class='dim'>-</td></tr>"
 
     edge_rows = "".join(
         "<tr>"
@@ -193,11 +193,11 @@ def render_html(result: ScanResult, version: str = "0.4.0") -> str:
         f"<td><a class='mono' href='{_esc(e.evidence_url)}'>{_esc(_short(e.to_value, 56))}</a></td>"
         "</tr>"
         for e in result.edges
-    ) or "<tr><td class='dim'>—</td></tr>"
+    ) or "<tr><td class='dim'>-</td></tr>"
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>thousand-eyes dossier — {_esc(_short(result.seed, 60))}</title>
+<title>thousand-eyes dossier - {_esc(_short(result.seed, 60))}</title>
 <style>
   body {{ background:{_BG}; color:{_FG}; font-family:Segoe UI,system-ui,sans-serif; margin:0; padding:24px 40px; }}
   h1 {{ font-size:22px; letter-spacing:.04em; margin:0 0 2px; }}
@@ -217,7 +217,7 @@ def render_html(result: ScanResult, version: str = "0.4.0") -> str:
   svg {{ width:100%; height:auto; border-radius:12px; margin:8px 0 4px; display:block; }}
   footer {{ margin-top:26px; color:#8a8f98; font-size:11px; }}
 </style></head><body>
-<h1><span>THOUSAND EYES</span> v{version} — evidence dossier</h1>
+<h1><span>THOUSAND EYES</span> v{version} - evidence dossier</h1>
 <div class="sub">seed: {_esc(result.seed)} &nbsp;·&nbsp; wild: {_esc(str(result.meta.get('wild', False)))} &nbsp;·&nbsp; {dur}s &nbsp;·&nbsp; nodes {len(result.nodes)} · edges {len(result.edges)} · leaves {len(result.leaves)}</div>
 {_svg(result)}
 {''.join(sections)}
@@ -225,5 +225,5 @@ def render_html(result: ScanResult, version: str = "0.4.0") -> str:
 <table><tr><th>class</th><th>record</th><th>proof</th></tr>{leaf_rows}</table>
 <h3 style='color:#8a8f98'>■ evidence edges ({len(result.edges)})</h3>
 <table><tr><th>from</th><th>via</th><th>found</th></tr>{edge_rows}</table>
-<footer>self-audit evidence snapshot — identifiers owner-consented · graphs are time-sensitive · zero external assets in this file</footer>
+<footer>self-audit evidence snapshot - identifiers owner-consented · graphs are time-sensitive · zero external assets in this file</footer>
 </body></html>"""

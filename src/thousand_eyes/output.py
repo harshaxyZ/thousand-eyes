@@ -1,7 +1,7 @@
 """Output writers v0.4: impact-ranked findings first, ambient noise last.
 
 The default render answers the hacker-POV question the operator asked:
-"what could a stranger do with what this scan proved?" — weaponised
+"what could a stranger do with what this scan proved?" - weaponised
 identity keys (name / second email / phone / stealer logs) come first,
 pivotable platform accounts next, ambient footprints (archives, mail
 infra, darknet index mentions) listed compactly at the end. Every line is
@@ -104,29 +104,29 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
         lines.append(f"  no public pivot")
     else:
         lines.append("")
-        lines.append(f"  THOUSAND EYES v{version} — the evidence bite")
+        lines.append(f"  THOUSAND EYES v{version} - the evidence bite")
         lines.append(f"  seed: {result.seed}")
         lines.append("")
-        lines.append(f"  ✜  WEAPONISED — identity keys an attacker starts here")
+        lines.append(f"  ✜  WEAPONISED - identity keys an attacker starts here")
         for ln, _why, _c in node_tiers.get(impact.WEAPONISED, []):
             lines.append(f"    {ln}")
         for ln, _why, _c in leaf_tiers.get(impact.WEAPONISED, []):
             lines.append(f"    {ln}")
         if not node_tiers.get(impact.WEAPONISED) and not leaf_tiers.get(impact.WEAPONISED):
-            lines.append("    — none found —")
+            lines.append("    - none found -")
         lines.append("")
-        lines.append(f"  ▦  ACCOUNTS CONFIRMED — pivot doors into this identity")
+        lines.append(f"  ▦  ACCOUNTS CONFIRMED - pivot doors into this identity")
         for ln, _why, _c in node_tiers.get(impact.PIVOTABLE, []):
             lines.append(f"    {ln}")
         for ln, _why, _c in leaf_tiers.get(impact.PIVOTABLE, []):
             lines.append(f"    {ln}")
         if not node_tiers.get(impact.PIVOTABLE) and not leaf_tiers.get(impact.PIVOTABLE):
-            lines.append("    — none found —")
+            lines.append("    - none found -")
         amb = node_tiers.get(impact.AMBIENT, []) + leaf_tiers.get(impact.AMBIENT, [])
         lines.append("")
         amb_concise = [ln.split(": ", 1)[1] if ": " in ln else ln[2:] for ln, _w, _c in amb]
         head = amb_concise[:8]
-        lines.append(f"  ·  ambient footprint ({len(amb_concise)}) — also on record:")
+        lines.append(f"  ·  ambient footprint ({len(amb_concise)}) - also on record:")
         for ln in head:
             lines.append(f"    · {ln}")
         if len(amb_concise) > 8:
@@ -151,13 +151,13 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
 
     if result.errors:
         lines.append("")
-        lines.append(f"  inconclusive ({len(result.errors)} sources responded badly — never a fabricated negative; details in --json)")
+        lines.append(f"  inconclusive ({len(result.errors)} sources responded badly - never a fabricated negative; details in --json)")
     return "\n".join(lines)
 
 
 def render_verbose(result: ScanResult, *, version: str = "0.4.0") -> str:
     lines: list[str] = []
-    lines.append(f"thousand-eyes v{version} — full evidence dump")
+    lines.append(f"thousand-eyes v{version} - full evidence dump")
     lines.append(_summary_counts(result))
     lines.append("")
 
@@ -204,7 +204,7 @@ def render_verbose(result: ScanResult, *, version: str = "0.4.0") -> str:
 
     if result.errors:
         lines.append("")
-        lines.append("errors (inconclusive — never a fabricated negative):")
+        lines.append("errors (inconclusive - never a fabricated negative):")
         for e in result.errors:
             lines.append(f"  {e.module}: {e.error}")
     return "\n".join(lines)

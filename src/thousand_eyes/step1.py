@@ -1,4 +1,4 @@
-"""step1 — email-only lead harvest (Step 1 of the walk).
+"""step1 - email-only lead harvest (Step 1 of the walk).
 
 One email in. Runs only the modules listed in EMAIL_SOURCES below,
 collects pivots + reset-only leaves, filters them against the user's
@@ -107,7 +107,7 @@ async def collect_email_leads(
 
         # --- github-commit-search ---
         # The module already only yields logins of User-typed authors, but
-        # web-flow is a bot type "User" in some commit roles — drop it here.
+        # web-flow is a bot type "User" in some commit roles - drop it here.
         try:
             res = await github_commit_search.run(client, email)
         except httpx.HTTPError as exc:
@@ -121,7 +121,7 @@ async def collect_email_leads(
                 continue
             add(LeadRow("url", p["value"], "github-commit-search", p["evidence_url"], p["snippet"]))
 
-        # --- pgp (keys.openpgp.org) — exception: API field proof ---
+        # --- pgp (keys.openpgp.org) - exception: API field proof ---
         try:
             res = await pgp.run(client, email)
         except httpx.HTTPError as exc:
@@ -137,7 +137,7 @@ async def collect_email_leads(
                 snippet = snippet.replace("___", "")
             add(LeadRow("url", p["value"], "pgp", p["evidence_url"], snippet))
 
-        # --- userrealm — infrastructure domain, not a pivot lead ---
+        # --- userrealm - infrastructure domain, not a pivot lead ---
         # Step 1 keeps it as a lead row of type "domain" ONLY if the
         # snippet is about this email; the API returns a field for the
         # address. userrealm is not a reset-only site, so keep it.
@@ -152,7 +152,7 @@ async def collect_email_leads(
                 continue
             add(LeadRow(p["type"], p["value"], "userrealm", p["evidence_url"], p["snippet"]))
 
-        # --- hibp — keyed; skip line is part of the required output ---
+        # --- hibp - keyed; skip line is part of the required output ---
         try:
             res = await hibp.run(client, email)
         except httpx.HTTPError as exc:
@@ -172,7 +172,7 @@ async def collect_email_leads(
             # records; hibp breach leaves fall under "reset" per spec.
             add(LeadRow("reset", leaf["site"], "hibp", leaf["url"], f'breach="{leaf["site"]}"'))
 
-        # --- breach-existence (xposedornot) — keyless, HUDSON excluded ---
+        # --- breach-existence (xposedornot) - keyless, HUDSON excluded ---
         try:
             res = await breach_existence.run(client, email)
         except httpx.HTTPError as exc:
@@ -215,7 +215,7 @@ async def collect_email_leads(
                 continue
             # pivot URL itself counts only if the page contained the seed;
             # snippet is the module's page-evidence string. For email/phone
-            # pivots, the snippet is descriptive of discovery on a seed page —
+            # pivots, the snippet is descriptive of discovery on a seed page -
             # keep them only when the seed is the pivot's parent evidence page.
             if p["type"] == "email" and p["value"].lower() == email.lower():
                 continue
@@ -224,7 +224,7 @@ async def collect_email_leads(
                 continue
             add(LeadRow(p["type"], p["value"], "exact-document", p["evidence_url"], snippet))
 
-    # Hudson is intentionally never called (no key, no darkweb) — spec.
+    # Hudson is intentionally never called (no key, no darkweb) - spec.
     return leads, skipped
 
 

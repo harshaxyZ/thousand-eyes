@@ -1,11 +1,11 @@
-"""thousand-eyes interactive TUI — a chat-first agent console.
+"""thousand-eyes interactive TUI - a chat-first agent console.
 
 Bare `thousand-eyes` opens this: black terminal, the violet banner up top,
 a streaming chat, a live pipeline HUD (progress bar · elapsed · ETA ·
 counts), a token pane, a status line and a one-line input box. It is a
 GENERAL conversational agent: chat about anything and it answers (LLM when
 a key is present, gracefully offline without one). An audit fires ONLY on a
-real identifier — email, username, domain, url, phone — or an explicit ask
+real identifier - email, username, domain, url, phone - or an explicit ask
 like "find out what you can using my email - x@y.com". Smalltalk never
 scans anything.
 
@@ -137,14 +137,14 @@ Footer { background: black; color: white; }
 
 CHAT_SYSTEM = (
     "You are thousand-eyes, an OSINT self-audit agent. Answer ONLY questions "
-    "about digital footprint, online presence, privacy and safety — data "
+    "about digital footprint, online presence, privacy and safety - data "
     "brokers, breach exposure, what strangers can find about someone, how to "
     "reduce an online footprint, how OSINT works. For anything off-topic "
     "(movies, recipes, code help, weather), say in one sentence that you only "
     "cover footprint, safety and online presence, then invite a lead. Be "
     "terse: at most 3 short sentences, no markdown, no headers, no emojis, no "
     "ANSI codes. Never fabricate a finding and never claim something is "
-    "absent — uncertainty is INCONCLUSIVE. To run an audit you need a lead "
+    "absent - uncertainty is INCONCLUSIVE. To run an audit you need a lead "
     "from the operator: email, username, domain, url or phone."
 )
 
@@ -193,7 +193,7 @@ def route_intent(text: str) -> Tuple[str, Optional[str]]:
 
     Actions: audit (payload = the lead) · ask_lead · chat.
     An audit fires only on a real identifier, or an explicit audit ask with
-    one — never on plain conversation.
+    one - never on plain conversation.
     """
     s = text.strip()
     low = s.lower()
@@ -221,7 +221,7 @@ def route_intent(text: str) -> Tuple[str, Optional[str]]:
     if cand is None and _HANDLE_RE.match(s) and s.lower() not in _STOP_WORDS:
         if "_" in s or any(c.isdigit() for c in s):
             cand, explicit = s, True
-    # '<audit verb> <handle>' — trailing token is the lead. Split on
+    # '<audit verb> <handle>' - trailing token is the lead. Split on
     # whitespace AND hyphens so "email - some_handle" yields the handle;
     # multi-word junk like "search the dark web" is stopped by the
     # trailing-word set, not by a word count (long trigger phrases are legal).
@@ -386,10 +386,10 @@ class ThousandEyesApp(App):
         return out
 
     def _print_welcome(self) -> None:
-        self._agent_line(f"thousand-eyes v{__version__} — online")
+        self._agent_line(f"thousand-eyes v{__version__} - online")
         self._agent_line("chat: ask me anything about footprint, privacy, "
                          "safety, OSINT.")
-        self._agent_line("audit: hand me a lead — email · username · domain · "
+        self._agent_line("audit: hand me a lead - email · username · domain · "
                          "url · phone.")
 
     # ------------------------------------------------------------- chat log
@@ -419,7 +419,7 @@ class ThousandEyesApp(App):
         self._agent_say(text)
 
     def _stream_line(self, text: str) -> None:
-        """Live step line — the agent's CURRENT STATE, one line, overwritten."""
+        """Live step line - the agent's CURRENT STATE, one line, overwritten."""
         try:
             self.query_one("#stream", Static).update(text)
         except Exception:
@@ -462,7 +462,7 @@ class ThousandEyesApp(App):
         elif action == "ask_lead":
             self._user_line(text)
             self._agent_line("which lead should I run? email, username, "
-                             "domain, url or phone — e.g. "
+                             "domain, url or phone - e.g. "
                              "\"audit me with you@example.com\"")
         elif text.lower().strip() == "status":
             self._user_line(text)
@@ -484,13 +484,13 @@ class ThousandEyesApp(App):
     def _findings_line(self) -> str:
         rows = [r for r in self._last_ledger if r.get("kind") == "finding"]
         if not rows:
-            return "no evidence rows yet — run an audit on a lead first."
+            return "no evidence rows yet - run an audit on a lead first."
         return f"{len(rows)} evidence row(s): " + "; ".join(
             f"{r.get('value')} via {r.get('source')}" for r in rows[:5])
 
     def _report_line(self) -> str:
         if not self._last_report:
-            return "no report yet — run an audit on a lead first."
+            return "no report yet - run an audit on a lead first."
         return f"last report: {len(self._last_report)} chars, " \
                f"{len(self._last_ledger)} ledger rows."
 
@@ -512,7 +512,7 @@ class ThousandEyesApp(App):
             self.action_exit()
             self.exit()
         else:
-            self._agent_line(f"unknown command: {cmd} — /help for the list")
+            self._agent_line(f"unknown command: {cmd} - /help for the list")
 
     # ------------------------------------------------------------- chat
 
@@ -523,7 +523,7 @@ class ThousandEyesApp(App):
             return
         llm = self._chat_client()
         if llm is None:
-            self._agent_line("no llm key — i only answer footprint, "
+            self._agent_line("no llm key - i only answer footprint, "
                              "privacy and osint smalltalk offline. hand me "
                              "a lead to audit.")
             return
@@ -548,7 +548,7 @@ class ThousandEyesApp(App):
 
     def _chat(self, text: str) -> None:
         if self._busy:
-            self._agent_say("(still working on the last run — /cancel to stop)")
+            self._agent_say("(still working on the last run - /cancel to stop)")
             return
         self.run_worker(self._chat_run(text), exclusive=True)
 
@@ -564,16 +564,16 @@ class ThousandEyesApp(App):
                 del self._history[:-12]        # keep the last ~6 turns
             if reply:
                 self._agent_say(reply)
-        except Exception:  # noqa: BLE001 — never crash the TUI
+        except Exception:  # noqa: BLE001 - never crash the TUI
             self._agent_say(self._offline_answer(text) or
-                            "(offline — no llm key, and that one isn't canned)")
+                            "(offline - no llm key, and that one isn't canned)")
         finally:
             self._busy = False
             self._stream_line("")
             self.query_one("#input", Input).focus()
 
     def _local_intent(self, text: str) -> Optional[str]:
-        """Operator dashboard words — answered locally, instantly, no LLM."""
+        """Operator dashboard words - answered locally, instantly, no LLM."""
         s = text.strip()
         low = s.lower()
         # read-only shell-out: !git status / !pip show thousand-eyes / …
@@ -586,12 +586,12 @@ class ThousandEyesApp(App):
             rows = self._last_ledger[-5:]
             if rows:
                 return "\n".join(
-                    f"· {r.get('tool')} — {r.get('summary', '')[:80]}" for r in rows)
-            return "no evidence rows yet — hand me a lead and i'll start the sweep."
+                    f"· {r.get('tool')} - {r.get('summary', '')[:80]}" for r in rows)
+            return "no evidence rows yet - hand me a lead and i'll start the sweep."
         if any(k in low for k in ("progress", "status")):
             if self._planner is not None:
                 sm = self._planner.analytics.summary()
-                return (f"run in flight — {sm.get('tool_calls', 0)} tool calls · "
+                return (f"run in flight - {sm.get('tool_calls', 0)} tool calls · "
                         f"{sm.get('pipelines_fired', 0)} batches · "
                         f"{sm.get('leads_seen', 0)} leads · ledger "
                         f"{len(self._planner.ledger)} rows")
@@ -599,7 +599,7 @@ class ThousandEyesApp(App):
         if any(k in low for k in ("report", "dossier", "summary", "summarise", "summarize")):
             if self._last_report:
                 return self._last_report[-1400:]
-            return "no dossier yet — run an audit first (type a lead)."
+            return "no dossier yet - run an audit first (type a lead)."
         if any(k in low for k in ("fence", "safe", "safety", "permission")):
             return ("fence: no .onion resolution · no auth probing · no form submission · "
                     "no password tests · no breach dumps · per-domain 300ms bucket · "
@@ -607,7 +607,7 @@ class ThousandEyesApp(App):
         return None
 
     def _live_model(self) -> str:
-        """The model that will actually answer — provider-aware, cheap."""
+        """The model that will actually answer - provider-aware, cheap."""
         client = self._chat_client()
         if client is not None:
             return getattr(client, "model", self.model) or self.model
@@ -624,15 +624,15 @@ class ThousandEyesApp(App):
     def _offline_answer(self, text: str) -> str:
         low = text.lower().strip()
         if any(k in low for k in ("hello", "hi", "hey", "yo", "sup")):
-            return ("hey. i read public data only — hand me a lead (email, "
+            return ("hey. i read public data only - hand me a lead (email, "
                     "username, domain, url, phone) and i'll audit it.")
         if "brokers" in low:
             return ("data brokers are the middlemen: they buy, merge and resell "
                     "your records. the audit sweeps them for your identifier "
-                    "and reports existence only — no dumps.")
+                    "and reports existence only - no dumps.")
         if "breach" in low:
             return ("a breach hit means your identifier appears in a known "
-                    "breach index. we never pull the dump — we only report "
+                    "breach index. we never pull the dump - we only report "
                     "that it exists, so you can rotate the password.")
         if "footprint" in low or "reduce" in low or "remove" in low:
             return ("start with an audit on your own email: it maps brokers, "
@@ -640,7 +640,7 @@ class ThousandEyesApp(App):
                     "can, opt out of brokers, and stop reusing handles.")
         if "osint" in low:
             return ("osint = open-source intelligence: only public, legal, "
-                    "first-party data. this tool is read-only and fenced — no "
+                    "first-party data. this tool is read-only and fenced - no "
                     ".onion, no auth probing, no form submission.")
         if "safe" in low or "privacy" in low:
             return ("read-only, keyless, first-party endpoints only. no "
@@ -652,7 +652,7 @@ class ThousandEyesApp(App):
 
     def _run_audit(self, leads: List[str], goal: str) -> None:
         if self._busy:
-            self._agent_line("(already running — /cancel first)")
+            self._agent_line("(already running - /cancel first)")
             return
         self._busy = True
         self._demo = False
@@ -747,10 +747,10 @@ class ThousandEyesApp(App):
         if findings:
             self._chat_line("[bold white]findings:[/]")
             for f in findings[:12]:
-                self._chat_line(f"[white]  · {f.get('value', '')} — "
+                self._chat_line(f"[white]  · {f.get('value', '')} - "
                                 f"{f.get('summary', '')}[/]")
         else:
-            self._chat_line("[white]no findings — everything inconclusive "
+            self._chat_line("[white]no findings - everything inconclusive "
                             "(or the run stopped early).[/]")
         self._chat_line(f"[bold white]report:[/] {len(report)} chars · "
                         f"ledger {len(self._last_ledger)} rows · fence: "
@@ -767,7 +767,7 @@ class ThousandEyesApp(App):
 
     def action_demo(self) -> None:
         if self._busy:
-            self._agent_line("(already running — /cancel first)")
+            self._agent_line("(already running - /cancel first)")
             return
         self._busy = True
         self._demo = True
@@ -813,7 +813,7 @@ class ThousandEyesApp(App):
                      "  /exit      quit",
                      "",
                      "  chat: ask anything about footprint / privacy / OSINT",
-                     "  audit: hand me a lead — email · username · domain · "
+                     "  audit: hand me a lead - email · username · domain · "
                      "url · phone",
                      f"  fence: {FENCE}"):
             self._chat_line(line)

@@ -5,7 +5,7 @@ Per spec: from a confirmed page body, extract ONLY:
   - emails
   - E.164 phones
   - a profile URL whose page ALSO contains the seed (confirmed by the caller
-    doing a second fetch — this module only yields *candidate* profile URLs;
+    doing a second fetch - this module only yields *candidate* profile URLs;
     it is the caller's job to confirm before treating one as evidence)
 
 Never extract bare words and call them usernames. No handle-mention regex,
