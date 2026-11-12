@@ -152,10 +152,19 @@ async def test_trigger_phrase_starts_agent():
         await pilot.pause(0.5)
         assert app._busy is True
         assert app._subject == ["demo.subject@example.org"]
+        planner = app._planner
+        assert planner is not None
         inp.value = "/cancel"
         await pilot.press("enter")
-        await pilot.pause()
-        assert app._planner is not None  # still winding down
+        await pilot.pause(0.2)
+        # the cancel signal must reach the running planner - how fast the
+        # in-flight step unwinds is machine-dependent, the signal is not
+        assert planner._stop is True
+        # and the console stays usable afterwards
+        inp.value = "/status"
+        await pilot.press("enter")
+        await pilot.pause(0.1)
+        assert app._planner is None or app._planner._stop is True
 
 
 @pytest.mark.asyncio
