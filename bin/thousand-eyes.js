@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// thousand-eyes — node wrapper: finds the installed python package and
+// thousand-eyes - node wrapper: finds the installed python package and
 // runs its console script. Same CLI as `pipx install thousand-eyes`.
 const { spawnSync } = require('child_process');
 const path = require('path');

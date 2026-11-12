@@ -2,7 +2,7 @@
 
 Usage:  python scripts/tui_chat.py "<lead>" [--demo] [--timeout S]
 
-Why a pty: the TUI is a Textual app — it renders to a terminal, not to a
+Why a pty: the TUI is a Textual app - it renders to a terminal, not to a
 pipe. A pty gives it a real terminal (size, keys, redraw) while we read the
 scrollback for the [ SUMMARY ] block the run ends with.
 """
