@@ -1,6 +1,6 @@
 {
   "name": "thousand-eyes",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "OSINT self-audit - one lead in, an impact-ranked evidence dossier out. Evidence-only, fenced, no invented findings.",
   "license": "MIT",
   "bin": {

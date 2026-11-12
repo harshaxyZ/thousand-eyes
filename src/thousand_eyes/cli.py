@@ -64,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="agent mode: model id (default gemini-3.5-flash-lite; flash-lite = free tier)")
     parser.add_argument("--agent-budget", type=int, default=120,
                         help="agent mode: max LLM calls (default 120)")
+    parser.add_argument("--budget-seconds", type=int, default=900,
+                        help="wall-clock budget for the cascade (default 900s = 15 min; "
+                             "quality first - raise it for a deeper sweep)")
+    parser.add_argument("--max-leads", type=int, default=0,
+                        help="hard cap on total leads processed (0 = unlimited, "
+                             "the time budget is the real governor)")
     parser.add_argument("--setup", action="store_true",
                         help="guided onboarding: pick a provider and store "
                              "your LLM key (gemini free tier or anthropic)")
@@ -271,6 +277,8 @@ def main(argv: list[str] | None = None) -> int:
                     transport=transport,
                     url_log=args.url_log,
                     sink=sink,
+                    time_budget=float(args.budget_seconds),
+                    max_leads=args.max_leads or None,
                 ))
         else:
             result_obj = asyncio.run(run_scan(
@@ -281,6 +289,8 @@ def main(argv: list[str] | None = None) -> int:
                 all_sites=wild,
                 transport=transport,
                 url_log=args.url_log,
+                time_budget=float(args.budget_seconds),
+                max_leads=args.max_leads or None,
             ))
     except Exception as exc:  # never show a bare traceback to a user mid-demo
         print(f"scan failed: {type(exc).__name__}: {exc}", file=sys.stderr)

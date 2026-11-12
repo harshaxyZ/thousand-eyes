@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.7.0 (2026-11-13)
+
+- **The cascade is the product now.** One lead in, and every confirmed
+  finding becomes the next lead: the run keeps walking the person's online
+  presence node by node until the frontier is exhausted or the budget ends.
+  The engine - not an LLM - decides what a finding is; the LLM only writes
+  the analysis over the real evidence afterwards (and is optional).
+- **The hinge that makes it spread:** a response-confirmed profile URL
+  proves the handle it lives on, so the handle becomes the next lead and
+  the sweep continues from there. 692 WhatsMyName templates plus a table
+  of platforms the dataset does not cover (bluesky, x, chess, lichess,
+  codeberg, dev.to, docker hub, keybase, hacker news) drive the extraction.
+  Handles are never invented - only taken from confirmed URLs.
+- **The API bridge** (`src/thousand_eyes/registry.py`): one list of every
+  source the tool can call and which lead types each one answers. The
+  deterministic engine and the LLM tool layer are both generated from it,
+  so a new source is added once and works everywhere.
+- **Six more keyless platforms** (live-verified before shipping): Lichess,
+  Codeberg, DEV Community, Discogs, Wikipedia accounts and Internet
+  Archive creator credits - 32 modules in total, 18 of them for usernames.
+- **Live cascade feed in the TUI:** every stage, every module call and
+  every finding as it happens ("stage 2 · username -> janedoe",
+  "found name: Jane Doe"), in a scrolling panel instead of a blank box.
+- **The report says what it did:** a stage table (lead, modules, findings,
+  seconds per stage) next to the ranked dossier, the coverage line and the
+  failed-check list.
+- **Honest confidence tags by provenance:** an account reached only through
+  a handle match is `[handle-reuse - same person unconfirmed]`; one
+  reached through the seed's own evidence (a commit, a gravatar entry) is
+  `[confirmed]`.
+- **Budgets instead of speed knobs:** `--budget-seconds` (default 900) and
+  `--max-leads` bound the cascade, and the report says exactly where it
+  stopped. Quality first - a deep sweep takes minutes on purpose.
+- Bug fixes found by live runs: chess.com returns `joined` as a unix
+  timestamp (not a string); the model shown in the status line is now the
+  model that will actually answer (never a hardcoded default).
+
 ## 0.6.2 (2026-11-12)
 
 - One-line install that actually works for a newcomer: `install.ps1`

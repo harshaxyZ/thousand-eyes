@@ -143,8 +143,8 @@ async def test_chat_needs_no_key_for_canned_topics():
 
 @pytest.mark.asyncio
 async def test_trigger_phrase_starts_agent():
-    """'find out what you can using my email - …' must arm the pipeline."""
-    app = ThousandEyesApp()
+    """'find out what you can using my email - …' must arm the cascade."""
+    app = ThousandEyesApp(budget_seconds=5)
     async with app.run_test() as pilot:
         inp = app.query_one("#input")
         inp.value = "find out what you can using my email - demo.subject@example.org"
@@ -152,19 +152,18 @@ async def test_trigger_phrase_starts_agent():
         await pilot.pause(0.5)
         assert app._busy is True
         assert app._subject == ["demo.subject@example.org"]
-        planner = app._planner
-        assert planner is not None
+        # the cascade is the engine now - it must have started a stage
+        assert app._scan_stats["stages"] >= 1
         inp.value = "/cancel"
         await pilot.press("enter")
         await pilot.pause(0.2)
-        # the cancel signal must reach the running planner - how fast the
-        # in-flight step unwinds is machine-dependent, the signal is not
-        assert planner._stop is True
+        # the cancel signal must reach the running cascade
+        assert app._cancel_requested is True
         # and the console stays usable afterwards
         inp.value = "/status"
         await pilot.press("enter")
         await pilot.pause(0.1)
-        assert app._planner is None or app._planner._stop is True
+        assert app._cancel_requested is True
 
 
 @pytest.mark.asyncio
@@ -178,23 +177,21 @@ async def test_hud_visible_progress_bar_and_stats():
         assert hud is not None and bar is not None and stats is not None
         assert "idle" in stats.renderable.lower()
         assert app.query_one("#chat").styles.scrollbar_size_vertical == 0
-        # Drive the HUD the way a live run does: arm the planner state the
-        # runner uses, then tick the heartbeat. Zero timing races here; the
+        # Drive the HUD the way a live cascade does: arm the run state the
+        # engine feeds, then tick the heartbeat. Zero timing races here; the
         # real-run integration is covered by test_trigger_phrase_starts_agent.
-        from types import SimpleNamespace
-
-        from thousand_eyes.agent.analytics import Analytics
-
-        app._planner = SimpleNamespace(analytics=Analytics())
-        app._bar_total = 12.0
+        app._busy = True
+        app._bar_total = 120.0
         app._run_start = time.monotonic() - 2.0
+        app._scan_stats = {"stages": 3, "modules": 11, "findings": 5, "leads": 3}
         app._tick()                       # one heartbeat
         live = stats.renderable.lower()
-        assert "t+" in live and "eta" in live and "tools" in live
+        assert "t+" in live and "eta" in live
+        assert "stage 3" in live and "modules 11" in live and "findings 5" in live
         assert "working" in live                      # elapsed-of-total line
         assert app._bar_total > 0         # bar has an honest time budget
         # disarm: HUD returns to idle and the bar empties
-        app._planner = None
+        app._busy = False
         app._tick()
         assert "idle" in stats.renderable.lower()
 

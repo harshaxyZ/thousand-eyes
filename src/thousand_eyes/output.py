@@ -103,6 +103,31 @@ def _handle_derived(url: str, handle: str) -> bool:
             or tail.startswith(h + "_") or tail.startswith(h + "%"))
 
 
+def _handle_only_urls(result: ScanResult) -> set[str]:
+    """URLs whose ONLY evidence is a handle match.
+
+    A URL reached through a username lead (a profile the sweep found for
+    that handle) proves the account exists, nothing more. A URL reached
+    through an email lead (a commit, a gravatar entry) is evidence-linked
+    to the seed and stays 'confirmed'.
+    """
+    types_by_value = {n.value: n.type for n in result.nodes.values()}
+    out: set[str] = set()
+    for node in result.nodes.values():
+        if node.type != "url":
+            continue
+        incoming = [e for e in result.edges if e.to_value == node.value]
+        if not incoming:
+            continue
+        from_username = any(types_by_value.get(e.from_value) == "username"
+                            for e in incoming)
+        from_email = any(types_by_value.get(e.from_value) == "email"
+                         for e in incoming)
+        if from_username and not from_email:
+            out.add(node.value)
+    return out
+
+
 def _seed_handle(result: ScanResult) -> str:
     """The operator-typed handle, when one exists. Used ONLY for the
     handle-reuse honesty tag - never as a new search key (hard rule #2)."""
@@ -131,6 +156,25 @@ def _coverage_line(result: ScanResult) -> str:
     return f"source coverage: {ok} answered · {failed} failed · {skipped} skipped ({pct}% of {total} checks){thin}"
 
 
+def _stage_table(result: ScanResult) -> list[str]:
+    """The cascade, stage by stage: what each lead was and what it produced.
+    This is the 'what it did' half of the report."""
+    stages = result.meta.get("stages") or []
+    if not stages:
+        return []
+    lines = [f"  what it did ({len(stages)} stage(s) - each stage's findings "
+             f"became the next stage's leads):"]
+    for st in stages:
+        lines.append(
+            f"    {st.get('n')}. {st.get('type')} {st.get('value')} → "
+            f"{st.get('findings', 0)} finding(s) from {st.get('modules', 0)} "
+            f"module(s) in {st.get('seconds', 0)}s")
+    stopped = result.meta.get("stopped")
+    if stopped:
+        lines.append(f"    stopped: {stopped}")
+    return lines
+
+
 def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.4.0") -> str:
     if verbose:
         return render_verbose(result, version=version)
@@ -157,9 +201,11 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
             lines.append("    - none found -")
         lines.append("")
         lines.append(f"  ▦  ACCOUNTS CONFIRMED - pivot doors, with confidence tags")
+        handle_only = _handle_only_urls(result)
         reuse_n = 0
         for ln, _why, _c in node_tiers.get(impact.PIVOTABLE, []):
-            if handle and _handle_derived(ln.split(": ", 1)[-1], handle):
+            value = ln.split(": ", 1)[-1]
+            if value in handle_only or (handle and _handle_derived(value, handle)):
                 reuse_n += 1
                 lines.append(f"    {ln}  [handle-reuse - same person unconfirmed]")
             else:
@@ -170,10 +216,10 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
             lines.append("    - none found -")
         if reuse_n > 1:
             lines.append(
-                f"    note: the handle \"{handle}\" appears on {reuse_n} platforms. "
-                "same handle != same person - platforms with [handle-reuse] tags "
-                "are literally-matching accounts only. corroborate via bio/name/"
-                "avatar overlap or cross-links before attributing them to one identity.")
+                f"    note: {reuse_n} of these are handle matches (a handle found "
+                "on another platform). same handle != same person - corroborate "
+                "via bio/name/avatar overlap or cross-links before attributing "
+                "them to one identity.")
         amb = node_tiers.get(impact.AMBIENT, []) + leaf_tiers.get(impact.AMBIENT, [])
         lines.append("")
         amb_concise = [ln.split(": ", 1)[1] if ": " in ln else ln[2:] for ln, _w, _c in amb]
@@ -188,6 +234,10 @@ def render_text(result: ScanResult, *, verbose: bool = False, version: str = "0.
         coverage = _coverage_line(result)
         if coverage:
             lines.append("  " + coverage)
+        stage_lines = _stage_table(result)
+        if stage_lines:
+            lines.append("")
+            lines.extend(stage_lines)
 
         seed_types = [t.strip() for t in result.seed_type.split(",") if t.strip()]
         manual: list[tuple[str, str]] = []

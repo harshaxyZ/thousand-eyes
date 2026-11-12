@@ -115,7 +115,7 @@ Footer { background: black; color: white; }
     padding: 0 1;
     color: white;
     background: black;
-    height: 3;
+    height: 10;
     scrollbar-size-vertical: 0;
     scrollbar-size-horizontal: 0;
 }
@@ -315,10 +315,12 @@ class ThousandEyesApp(App):
         Binding("ctrl+c", "quit", "quit"),
     ]
 
-    def __init__(self, model: str = "", budget: int = 120) -> None:
+    def __init__(self, model: str = "", budget: int = 120,
+                 budget_seconds: int = 600) -> None:
         super().__init__()
-        self.model = model or "claude-sonnet-5"
+        self.model = model or ""
         self.budget = budget
+        self.budget_seconds = budget_seconds
         self._busy = False
         self._stream = ""
         self._planner: Optional[Planner] = None
@@ -327,10 +329,14 @@ class ThousandEyesApp(App):
         self._subject: List[str] = []
         self._last_report = ""
         self._last_ledger: List[dict] = []
+        self._last_result: Any = None   # last ScanResult (the real findings)
         self._said: List[str] = []      # every agent line (tests read this)
         self._demo = False
         self._bar_total = 0.0          # seconds-of-work budget for this run
         self._run_start = 0.0          # monotonic start of current run
+        self._cancel_requested = False
+        self._scan_stats: Dict[str, int] = {"stages": 0, "modules": 0,
+                                            "findings": 0, "failures": 0}
 
     # ------------------------------------------------------------- layout
 
@@ -339,7 +345,8 @@ class ThousandEyesApp(App):
         yield Static("", id="banner")
         yield RichLog(id="chat", auto_scroll=True, markup=True, wrap=True)
         yield self._hud()
-        yield Static("", id="stream", markup=False)
+        yield RichLog(id="stream", auto_scroll=True, markup=True, wrap=True,
+                      highlight=False)
         yield Static("", id="status")
         yield Input(placeholder="chat about anything · or hand me a lead: "
                     "email · username · domain · url · phone", id="input")
@@ -444,9 +451,11 @@ class ThousandEyesApp(App):
         self._agent_say(text)
 
     def _stream_line(self, text: str) -> None:
-        """Live step line - the agent's CURRENT STATE, one line, overwritten."""
+        """One line of the live cascade feed (the panel keeps the history)."""
+        if not text:
+            return
         try:
-            self.query_one("#stream", Static).update(text)
+            self.query_one("#stream", RichLog).write(Text.from_markup(text))
         except Exception:
             pass
 
@@ -505,6 +514,37 @@ class ThousandEyesApp(App):
             self._user_line(text)
             self._history.append({"role": "user", "content": text})
             self._chat(text)
+
+    def _recap(self) -> str:
+        """What it did, what it found - from the REAL result, not a ledger
+        of empty tool names."""
+        result = self._last_result
+        if result is None:
+            return ("no audit finished yet - hand me a lead (email, username, "
+                    "domain, url, phone) and i'll run the cascade.")
+        stages = result.meta.get("stages") or []
+        lines: List[str] = []
+        lines.append(f"what it did - {len(stages)} stage(s), "
+                     f"{self._scan_stats.get('modules', 0)} module call(s):")
+        for st in stages[:14]:
+            lines.append(f"· stage {st.get('n')}: {st.get('type')} "
+                         f"{st.get('value')} → {st.get('findings', 0)} finding(s)")
+        if len(stages) > 14:
+            lines.append(f"· … and {len(stages) - 14} more stage(s)")
+        found = self._found_lines(result)
+        lines.append("")
+        lines.append(f"what it found - {len(found)} confirmed item(s):")
+        lines.extend(found[:20])
+        if len(found) > 20:
+            lines.append(f"· … and {len(found) - 20} more")
+        if not found:
+            lines.append("· nothing confirmed - every source was inconclusive "
+                         "(see the 'checks that failed' section)")
+        stopped = result.meta.get("stopped")
+        if stopped:
+            lines.append("")
+            lines.append(f"stopped early: {stopped}")
+        return "\n".join(lines)
 
     def _findings_line(self) -> str:
         rows = [r for r in self._last_ledger if r.get("kind") == "finding"]
@@ -646,12 +686,10 @@ class ThousandEyesApp(App):
         if s.startswith("/"):
             return self._command(s)
         if any(k in low for k in ("finding", "findings", "evidence", "results",
-                                  "what did you", "what have you")):
-            rows = self._last_ledger[-5:]
-            if rows:
-                return "\n".join(
-                    f"· {r.get('tool')} - {r.get('summary', '')[:80]}" for r in rows)
-            return "no evidence rows yet - hand me a lead and i'll start the sweep."
+                                  "what did you", "what have you",
+                                  "what did you do", "what all did you do",
+                                  "what was found", "recap", "summar")):
+            return self._recap()
         if any(k in low for k in ("progress", "status")):
             if self._planner is not None:
                 sm = self._planner.analytics.summary()
@@ -671,11 +709,16 @@ class ThousandEyesApp(App):
         return None
 
     def _live_model(self) -> str:
-        """The model that will actually answer - provider-aware, cheap."""
+        """The model that will actually answer - provider-aware, never a
+        hardcoded default (the key on this machine decides)."""
         client = self._chat_client()
         if client is not None:
-            return getattr(client, "model", self.model) or self.model
-        return self.model
+            model = getattr(client, "model", "") or ""
+            provider = getattr(client, "provider", "") or ""
+            if model:
+                return f"{provider}/{model}" if provider else model
+            return provider or "llm"
+        return self.model or "offline (no llm key)"
 
     def _chat_client(self):
         if self._llm is None:
@@ -821,111 +864,184 @@ class ThousandEyesApp(App):
         self._busy = True
         self._demo = False
         self._subject = leads
-        self._bar_total = self.budget
+        self._bar_total = float(self.budget_seconds)
         self._run_start = time.monotonic()
+        self._cancel_requested = False
+        self._scan_stats = {"stages": 0, "modules": 0, "findings": 0, "failures": 0}
         self._status(f"audit starting · {len(leads)} lead(s) · "
-                     f"{self.model}")
+                     f"cascade · budget {self.budget_seconds}s")
         self._audit_async(leads, goal, False)
 
     def _audit_async(self, leads: List[str], goal: str, demo: bool) -> None:
-        """Run the planner inside the app's event loop, streaming to the UI."""
+        """Run the deterministic cascade (the API bridge) inside the app's
+        event loop. The engine - not an LLM - decides what is a finding;
+        every confirmed pivot becomes the next lead, and the cascade runs
+        until the frontier is exhausted or the budget runs out."""
 
         async def runner() -> None:
-            llm = self._chat_client()
+            from thousand_eyes.scan import run_scan
             transport = demo_transport() if demo else None
-            planner = Planner(llm, goal=goal, budget_calls=self.budget,
-                              transport=transport)
-            self._planner = planner
             try:
-                report = await planner.run(leads, goal, fast=True)
-                self._finish(report, planner)
-            except Exception as e:
-                self._finish(f"run failed: {e}", planner)
-            finally:
-                self._planner = None
+                result = await run_scan(
+                    raw_seeds=list(leads),
+                    max_depth=4,
+                    wild=False,
+                    all_sites=True,
+                    transport=transport,
+                    on_event=self._on_scan_event,
+                    time_budget=float(self.budget_seconds),
+                    abort=lambda: self._cancel_requested,
+                )
+            except Exception as e:      # never show a bare traceback
+                self._agent_line(f"scan failed: {type(e).__name__}: {e}")
+                self._busy = False
+                self._status("ready")
+                self._refresh_hud()
+                return
+            self._result = result
+            self._finish_scan(result)
+
         self._task = asyncio.create_task(runner())
 
-    def _on_event(self, event: Tuple[str, Any]) -> None:
+    # ------------------------------------------------- live cascade feed
+
+    def _on_scan_event(self, event: Tuple[str, Any]) -> None:
+        """Render the engine's live events as the 'doing this / found that'
+        feed. This is the honest picture of the cascade, step by step."""
         kind, data = event
-        label = _STEP_LABEL.get(kind, kind)
-        if kind == "tool_start":
-            label = f"running {data.get('tool', '?')}"
-        elif kind == "tool_done":
-            label = f"{data.get('tool', '?')} ok · {data.get('ms', 0):.0f}ms"
-        elif kind == "tool_err":
-            label = f"{data.get('tool', '?')} failed"
-        elif kind == "finding":
-            label = f"finding: {data.get('kind', '?')} · {data.get('value', '')}"
-        elif kind == "round":
-            label = (f"round {data.get('depth', 0)} · {data.get('tools', 0)} "
-                     f"tools · ledger {data.get('ledger', 0)}")
-        elif kind == "done":
-            label = "run complete"
-        self._stream_line(label)
-        # live HUD refresh
+        if kind == "stage_start":
+            self._scan_stats["stages"] = data.get("n", 0)
+            self._scan_stats["leads"] = data.get("n", 0)
+            self._stream_line(f"[bold #a78bfa]stage {data.get('n')}[/] "
+                              f"{data.get('type')} → {data.get('value')}")
+        elif kind == "module":
+            state = data.get("state")
+            mark = "[#ff6b6b]fail[/]" if state == "fail" else "[#5bd6a0]ok[/]"
+            n = data.get("findings", 0)
+            extra = f" · {n} finding(s)" if n else ""
+            err = data.get("error") or ""
+            tail = f" · {err}" if err else ""
+            self._stream_line(f"  {mark} {data.get('label')}{extra}{tail}")
+        elif kind == "found":
+            self._scan_stats["findings"] = self._scan_stats.get("findings", 0) + 1
+            self._stream_line(f"    [bold #f5c542]found[/] {data.get('kind')}: "
+                              f"{data.get('value')}")
+        elif kind == "stage_end":
+            self._stream_line(f"  [dim]stage {data.get('n')} done · "
+                              f"{data.get('findings', 0)} finding(s) · "
+                              f"{data.get('modules', 0)} module(s) · "
+                              f"{data.get('seconds', 0)}s[/]")
+        elif kind == "stopped":
+            self._stream_line(f"[bold #ff6b6b]stopped[/] {data.get('reason')}")
         self._refresh_hud()
+
+    # --------------------------------------------------------- the report
+
+    def _finish_scan(self, result) -> None:
+        """Print what it did and what it found - the deterministic truth
+        first, then (optionally) the LLM's analysis over that same evidence."""
+        from thousand_eyes.output import render_text
+
+        self._last_result = result
+        wall = result.meta.get("duration_seconds", 0.0)
+        stages = result.meta.get("stages") or []
+        self._chat_line("")
+        self._chat_line("[bold #a78bfa]── WHAT IT DID ─────────────────────────────[/]")
+        for st in stages:
+            self._chat_line(
+                f"[white]  stage {st.get('n')}: {st.get('type')} "
+                f"[bold]{st.get('value')}[/] → {st.get('findings', 0)} finding(s) "
+                f"from {st.get('modules', 0)} module(s) "
+                f"({st.get('seconds', 0)}s)[/]")
+        stopped = result.meta.get("stopped")
+        if stopped:
+            self._chat_line(f"[#ff6b6b]  {stopped}[/]")
+        self._chat_line("")
+        self._chat_line(render_text(result, version=__version__))
+        self._chat_line("")
+        self._chat_line("[bold #a78bfa]── WHAT IT FOUND ────────────────────────────[/]")
+        found = self._found_lines(result)
+        if found:
+            for line in found:
+                self._chat_line(line)
+        else:
+            self._chat_line("[white]  nothing confirmed - every source was "
+                            "inconclusive (see 'checks that failed').[/]")
+        self._last_report = "\n".join(found)
+        self._busy = False
+        self._refresh_hud()
+        self._status("ready")
+        self._agent_line(f"done · {len(stages)} stage(s) · "
+                         f"{self._scan_stats.get('findings', 0)} finding(s) · "
+                         f"{wall}s · ask 'what did you find' for the recap.")
+        self._task = asyncio.create_task(self._llm_analysis(result))
+
+    def _found_lines(self, result) -> List[str]:
+        """Every confirmed pivot, one line each, with its evidence source."""
+        out: List[str] = []
+        for node in result.nodes.values():
+            if node.value == result.seed:
+                continue
+            if node.type == "fact":
+                continue
+            out.append(f"[white]  · {node.type}: {node.value}[/]")
+        for leaf in result.leaves:
+            out.append(f"[white]  · {leaf.site}[/]")
+        return out[:60]
+
+    async def _llm_analysis(self, result) -> None:
+        """Optional: the LLM writes the analysis over the REAL evidence the
+        engine collected. If there is no key (or it fails), the deterministic
+        report above stands on its own - nothing is lost."""
+        llm = self._chat_client()
+        if llm is None:
+            return
+        digest = "\n".join(self._found_lines(result))[:4000]
+        stages = "\n".join(
+            f"stage {s.get('n')}: {s.get('type')} {s.get('value')} -> "
+            f"{s.get('findings')} finding(s)" for s in (result.meta.get("stages") or []))
+        prompt = (
+            "You are analysing a finished OSINT self-audit. The evidence below is "
+            "REAL and confirmed by public first-party APIs. Write a tight "
+            "operator-facing analysis: who is this person, what is their online "
+            "presence, what would an attacker do with it, and what to fix first. "
+            "Be concrete, cite the identifiers, keep it under 180 words, no "
+            "markdown headers, no emojis. Never invent a finding that is not in "
+            "the evidence.\n\n"
+            f"STAGES:\n{stages}\n\nFINDINGS:\n{digest}")
+        out = ""
+        try:
+            async for chunk, _stats in llm.chat([{"role": "user", "content": prompt}]):
+                out += chunk
+        except Exception:
+            return
+        text = out.strip()
+        if text:
+            self._chat_line("")
+            self._chat_line("[bold #a78bfa]── ANALYSIS ────────────────────────────────[/]")
+            self._chat_line(f"[white]{text}[/]")
 
     # ------------------------------------------------------------- HUD
 
     def _refresh_hud(self) -> None:
-        planner = self._planner
         bar = self.query_one("#bar")
         stats = self.query_one("#stats")
-        if planner is None:
-            bar.update(progress=100)
-            stats.update("idle · model " + self._live_model())
+        if not self._busy:
+            bar.update(progress=0)
+            stats.update("idle · model " + self._live_model()
+                         + " · cascade budget "
+                         + f"{self.budget_seconds}s · no run in flight")
             return
-        a: Analytics = planner.analytics
         elapsed = time.monotonic() - self._run_start
         frac = min(1.0, elapsed / max(self._bar_total, 1.0))
         bar.update(progress=int(frac * 100))
         eta = max(0.0, self._bar_total - elapsed)
         s = (f"working · t+{_fmt_s(elapsed)} · eta {_fmt_s(eta)} · "
-             f"tools {a.tool_calls} · fetch {a.fetches} · "
-             f"breaches {a.breaches} · "
-             f"tok {a.prompt_tokens + a.completion_tokens} ({a.tok_per_s():.0f}/s) · "
-             f"llm {a.llm_calls} · ttft {a.avg_ttft_ms():.0f}ms · "
-             f"pivots {a.pivots}")
+             f"stage {self._scan_stats.get('stages', 0)} · "
+             f"modules {self._scan_stats.get('modules', 0)} · "
+             f"findings {self._scan_stats.get('findings', 0)} · "
+             f"leads {self._scan_stats.get('leads', 0)}")
         stats.update(s)
-
-    # ------------------------------------------------------------- summary
-
-    def _finish(self, report: str, planner: Planner) -> None:
-        self._last_report = report
-        self._last_ledger = planner.ledger_rows()
-        a = planner.analytics
-        wall = a.summary().get("wall_s", 0.0)
-        self._stream_line("")
-        self._chat_line("")
-        self._chat_line("[bold white]┌─[ SUMMARY ]──────────────────────"
-                        "──────────────────┐[/]")
-        self._chat_line(f"[white]wall {_fmt_s(wall)} · llm calls "
-                        f"{a.llm_calls} · tok {a.prompt_tokens + a.completion_tokens} "
-                        f"({a.tok_per_s():.0f}/s) · ttft avg "
-                        f"{a.avg_ttft_ms():.0f}ms · tools {a.tool_calls} · "
-                        f"fetch {a.fetches} · breaches {a.breaches} · "
-                        f"sites {a.sites_claimed} · dork hits {a.dork_hits} · "
-                        f"dark hits {a.dark_hits} · pivots {a.pivots} · "
-                        f"errors {a.tool_errors}[/]")
-        findings = [r for r in self._last_ledger if r.get("kind") == "finding"]
-        if findings:
-            self._chat_line("[bold white]findings:[/]")
-            for f in findings[:12]:
-                self._chat_line(f"[white]  · {f.get('value', '')} - "
-                                f"{f.get('summary', '')}[/]")
-        else:
-            self._chat_line("[white]no findings - everything inconclusive "
-                            "(or the run stopped early).[/]")
-        self._chat_line(f"[bold white]report:[/] {len(report)} chars · "
-                        f"ledger {len(self._last_ledger)} rows · fence: "
-                        f"{FENCE}[/]")
-        self._chat_line("[bold white]└──────────────────────────────────"
-                        "──────────────────┘[/]")
-        self._chat_line("")
-        self._agent_line("done. chat more, or hand me another lead.")
-        self._busy = False
-        self._refresh_hud()
-        self._status("ready")
 
     # ------------------------------------------------------------- commands
 
@@ -936,29 +1052,32 @@ class ThousandEyesApp(App):
         self._busy = True
         self._demo = True
         self._subject = ["demo.subject@example.org"]
-        self._bar_total = 30.0
+        self._bar_total = float(self.budget_seconds)
         self._run_start = time.monotonic()
+        self._cancel_requested = False
+        self._scan_stats = {"stages": 0, "modules": 0, "findings": 0, "failures": 0}
         self._status("demo mode · offline replay")
         self._agent_line("demo run starting (offline synthetic replay)…")
         self._audit_async(self._subject, "demo", True)
 
     def action_status(self) -> None:
-        a: Optional[Analytics] = self._planner.analytics if self._planner else None
-        if a is None:
+        if not self._busy:
             self._agent_line("idle · no run in flight · model "
-                             f"{self.model} · budget {self.budget}")
+                             f"{self._live_model()} · cascade budget "
+                             f"{self.budget_seconds}s")
             return
-        wall = a.summary().get("wall_s", 0.0)
+        elapsed = time.monotonic() - self._run_start
         self._agent_line(
-            f"running · wall {_fmt_s(wall)} · llm {a.llm_calls} · "
-            f"tok {a.prompt_tokens + a.completion_tokens} ({a.tok_per_s():.0f}/s) · tools "
-            f"{a.tool_calls} · fetch {a.fetches} · breaches {a.breaches} · "
-            f"pivots {a.pivots} · errors {a.tool_errors}")
+            f"running · t+{_fmt_s(elapsed)} · stage "
+            f"{self._scan_stats.get('stages', 0)} · modules "
+            f"{self._scan_stats.get('modules', 0)} · findings "
+            f"{self._scan_stats.get('findings', 0)} · leads "
+            f"{self._scan_stats.get('leads', 0)}")
 
     def action_cancel(self) -> None:
-        if self._planner:
-            self._planner.stop()
-            self._status("stopping…")
+        if self._busy:
+            self._cancel_requested = True
+            self._status("stopping… (the cascade stops after the current step)")
         else:
             self._status("nothing to cancel")
 

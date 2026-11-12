@@ -23,14 +23,25 @@ actually DO with it, in ranked order, every line carrying live proof.
 ## What you get
 
 ```
+WHAT IT DID (7 stages - each stage's findings became the next stage's leads):
+  1. email jane.doe@example.com → 9 finding(s) from 12 module(s) in 21.4s
+  2. username janedoe → 14 finding(s) from 18 module(s) in 96.2s
+  3. url https://github.com/janedoe → 3 finding(s) from 3 module(s) in 12.1s
+  ...
+
 ✜  WEAPONISED: identity keys an attacker starts here
    ✜ name: ✔  ✜ second email: ✔  ✜ stealer-log hits
-▦  ACCOUNTS CONFIRMED: pivot doors into this identity
-   ▦ github.com/...  ✔  ▦ twitter.com/...  ✔  ✜ Collection1 (2019-01-07)
+▦  ACCOUNTS CONFIRMED: pivot doors, with confidence tags
+   ▦ github.com/...  [confirmed]  ▦ x.com/...  [handle-reuse - same person unconfirmed]
 ✔  ambient footprint: archives, infra, index mentions
-counts ✔ manual next-steps ✔ skipped/inconclusive (never faked silent)
+counts ✔ source coverage ✔ stage table ✔ skipped/inconclusive (never faked silent)
 ```
 
+- **One lead in, the whole presence out.** Every confirmed finding becomes
+  the next lead: a profile URL proves the handle it lives on, so the handle
+  is checked on every platform, and its new accounts link to new URLs. The
+  cascade runs until the frontier is empty or the budget ends - and the
+  report says which stage found what. See `docs/PIPELINE.md`.
 - **Evidence only.** Every row carries its source, the request that produced
   it and a quotable snippet. Blocked sources stay *inconclusive*; nothing is
   ever silently reported as "not found".
@@ -128,6 +139,8 @@ thousand-eyes you@example.com --demo        # offline synthetic replay (venue-sa
 thousand-eyes you@example.com --url-log urls.log   # full outbound-URL transparency
 thousand-eyes --agent you@example.com       # agentic mode (LLM-planned, see below)
 thousand-eyes --demo --agent you@example.com  # agent mode, offline synthetic replay
+thousand-eyes you@example.com --budget-seconds 1800   # deeper cascade (quality first)
+thousand-eyes you@example.com --max-leads 300         # hard ceiling on nodes visited
 ```
 
 - Default mode never invents usernames. `--full` opts into wildfire: bigger
@@ -163,8 +176,8 @@ the keyless public endpoints.
 
 | lead type | modules |
 |-----------|---------|
-| email | gravatar, breach-index (HIBP, keyed), github-commit-search, email-registration sweep, Microsoft userrealm, xposedornot breach-existence, Hudson Rock stealer-log (keyed), PGP (keys.openpgp.org), registration leaves, darkweb index (ahmia), exact-document search, domain posture (DoH/crt.sh/RDAP) |
-| username | WhatsMyName sweep (692-site dataset), github-profile, gitlab-profile, keybase-proofs, reddit-user, mastodon-lookup, bluesky-profile, hackernews-user, dockerhub-profile, chess-profile, darkweb index |
+| email | gravatar, breach-index (HIBP, keyed), github-commit-search, userrealm, xposedornot breach-existence, Hudson Rock stealer-log (keyed), PGP (keys.openpgp.org), registration leaves, darkweb index (ahmia), exact-document search, mail posture (DoH/crt.sh/RDAP) |
+| username | WhatsMyName sweep (692-site dataset), github-profile, gitlab-profile, keybase-proofs, reddit-user, mastodon-lookup, bluesky-profile, hackernews-user, dockerhub-profile, chess-profile, lichess-profile, codeberg-profile, devto-profile, discogs-profile, wikipedia-user, archive-creator, darkweb index, exact-document |
 | url | fetch + strict extraction (+github interconnect), wayback CDX, security-header posture |
 | phone | exact-document (quoted search) |
 | domain | DoH MX records + certificate transparency + RDAP, security-header posture |

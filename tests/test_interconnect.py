@@ -321,5 +321,14 @@ async def test_scan_does_not_trigger_interconnect_for_non_profile_github_url(rou
 
     await run_scan(FIXTURE_EMAIL, transport=transport)
 
-    assert not any("api.github.com/users/" in u for u in router.requested_urls)
-    assert not any("keybase.io" in u for u in router.requested_urls)
+    # a repo URL is NOT a github profile root, so the strict profile-root
+    # extractor (the interconnect's rule) says no
+    from thousand_eyes.scan import _is_github_profile_root
+    assert not _is_github_profile_root("https://github.com/fixtureuser/some-repo")
+    assert _is_github_profile_root("https://github.com/fixtureuser")
+
+    # the cascade still learns the OWNER handle from the repo URL (the URL
+    # proves the owner exists there), so the account gets confirmed through
+    # the username arm - that is the point of the cascade, not the old
+    # profile-root interconnect.
+    assert any("api.github.com/users/fixtureuser" in u for u in router.requested_urls)
