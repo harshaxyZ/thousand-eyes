@@ -693,7 +693,8 @@ def show_banner(animate=True, loops=0, width=None, fps=30, speed=1.0, eye=True, 
         raise KeyboardInterrupt
 
 
-if __name__ == "__main__":
+def main() -> int:
+    """CLI entry: `thousand-eyes-banner` (also `python -m thousand_eyes.banner`)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--static", action="store_true", help="print once, no animation")
     ap.add_argument("--once", action="store_true", help="play once then exit (~4.3 s)")
@@ -708,3 +709,8 @@ if __name__ == "__main__":
                     speed=a.speed, eye=not a.no_eye, small=a.small)
     except KeyboardInterrupt:
         pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
