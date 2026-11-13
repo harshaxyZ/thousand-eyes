@@ -105,13 +105,6 @@ def status_line() -> str:
     if key:
         where = "config file" if source == "config" else "environment"
         return f"llm key: found ({provider}, via {where}) - full chat + --agent active"
-    try:
-        from thousand_eyes.agent.providers import best_local_model
-        local = best_local_model()
-    except Exception:
-        local = ""
-    if local:
-        return f"llm: local ollama model ({local}) - free, offline, no key"
     return ("llm key: not set - chat runs on the offline engine "
-            "(add one: /setup gemini <key> or `thousand-eyes --setup`; a "
-            "local ollama server also works, free and keyless)")
+            "(add one: /setup gemini <key> or `thousand-eyes --setup`; the "
+            "audit itself never needs an LLM)")

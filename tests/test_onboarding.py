@@ -106,33 +106,6 @@ def test_cli_setup_flag_uses_the_guided_flow(monkeypatch):
 
 # --------------------------------------------------------- free llm paths
 
-def test_local_ollama_is_discovered_when_running(monkeypatch):
-    """A local ollama server = a completely free, keyless, offline LLM."""
-    from thousand_eyes.agent import providers
-
-    class FakeResponse:
-        status_code = 200
-
-        @staticmethod
-        def json():
-            return {"models": [{"name": "qwen2.5:7b"}, {"name": "llama3.2:3b"}]}
-
-    monkeypatch.setattr(providers.httpx, "get", lambda *a, **k: FakeResponse())
-    assert providers.local_models() == ["qwen2.5:7b"]
-    assert providers.best_local_model() == "qwen2.5:7b"
-
-
-def test_local_ollama_absent_is_not_an_error(monkeypatch):
-    from thousand_eyes.agent import providers
-
-    def boom(*a, **k):
-        raise providers.httpx.ConnectError("refused")
-
-    monkeypatch.setattr(providers.httpx, "get", boom)
-    assert providers.local_models() == []
-    assert providers.best_local_model() == ""
-
-
 def test_gemini_free_tier_403_explains_the_fix(monkeypatch):
     """The 403 google returns when a project has no free-tier access must
     tell the operator what to do, not just print a code."""
@@ -173,7 +146,16 @@ def test_gemini_free_tier_403_explains_the_fix(monkeypatch):
     with pytest.raises(RuntimeError) as exc:
         asyncio.run(_run())
     assert "free-tier" in str(exc.value)
-    assert "ollama" in str(exc.value)
+    assert "--setup" in str(exc.value)
+
+
+def test_no_local_llm_is_ever_contacted():
+    """The tool must never reach for a local model server on its own."""
+    from thousand_eyes.agent import providers
+    assert not hasattr(providers, "OllamaClient")
+    assert not hasattr(providers, "local_models")
+    src = open(providers.__file__, encoding="utf-8").read()
+    assert "11434" not in src and "ollama" not in src.lower()
 
 
 # ------------------------------------------------------------------ doctor

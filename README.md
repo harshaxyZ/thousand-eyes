@@ -127,11 +127,9 @@ thousand-eyes                     # open the chat console
 the chat picks it up instantly. Without a key the chat still answers - it
 runs on the built-in offline engine, so the tool is never dead weight.
 
-**Completely free, no key, no account:** run a local [ollama](https://ollama.com)
-server (`ollama pull qwen2.5`) and thousand-eyes finds it automatically -
-the LLM then runs on your machine, offline, and nothing leaves it. The
-audit itself never needs an LLM at all: every source is a free, keyless,
-first-party public API.
+**Completely free:** every data source the audit uses is a free, keyless,
+first-party public API - the tool itself never needs an LLM to produce
+findings. An LLM only powers the chat and the written analysis.
 
 ## Use
 

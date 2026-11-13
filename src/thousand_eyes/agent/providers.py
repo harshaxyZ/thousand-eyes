@@ -30,12 +30,6 @@ GEMINI_PRO = "gemini-2.5-pro"
 
 ANTHROPIC_API = "https://api.anthropic.com/v1/messages"
 GEMINI_V1 = "https://generativelanguage.googleapis.com/v1beta"
-OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-
-#: preferred local model names, best first - whatever ollama actually has
-#: installed wins (see local_models()).
-LOCAL_MODEL_PREFERENCE = ("qwen2.5", "llama3.2", "llama3.1", "mistral",
-                          "phi3", "gemma2", "llama3")
 
 CLAUDE_MODELS = CLAUDE_CANDIDATES
 GEMINI_MODELS = (GEMINI_FLASH_LITE, GEMINI_FLASH, GEMINI_PRO)
@@ -85,51 +79,20 @@ def best_model() -> str:
     return ANTHROPIC_MODEL if provider == "anthropic" else GEMINI_FLASH_LITE
 
 
-def local_models() -> list[str]:
-    """Models a local ollama server has installed (empty when it is not
-    running). This is the only completely free LLM path: no key, no
-    account, no network."""
-    try:
-        r = httpx.get(f"{OLLAMA_URL}/api/tags", timeout=1.5)
-        data = r.json()
-    except Exception:      # noqa: BLE001 - no ollama, no problem
-        return []
-    names = [str(m.get("name") or "") for m in (data.get("models") or [])]
-    names = [n for n in names if n]
-    # prefer the models we know behave well for this job
-    for preferred in LOCAL_MODEL_PREFERENCE:
-        for name in names:
-            if name.lower().startswith(preferred):
-                return [name]
-    return names
-
-
-def best_local_model() -> str:
-    models = local_models()
-    return models[0] if models else ""
-
-
 def client_for(model: Optional[str] = None) -> _BaseLLM:
-    """Build the right client. Claude preferred, Gemini as fallback, and a
-    local ollama model when neither key is available (the free path)."""
+    """Build the right client. Claude preferred, Gemini as fallback."""
     provider, key = discover_key()
     if model:
         if model.startswith("claude") or model.startswith("gpt"):
             return ClaudeClient(key or os.getenv("ANTHROPIC_API_KEY", ""), model)
-        if model.startswith(("llama", "qwen", "mistral", "phi", "gemma")):
-            return OllamaClient(model)
         return GeminiClient(key or os.getenv("GEMINI_API_KEY", ""), model)
     if provider == "anthropic":
         return ClaudeClient(key, ANTHROPIC_MODEL)
     if provider == "gemini":
         return GeminiClient(key, GEMINI_FLASH_LITE)
-    local = best_local_model()
-    if local:
-        return OllamaClient(local)
     raise RuntimeError(
-        "no LLM found: run `thousand-eyes --setup` (gemini free tier or claude), "
-        "or start a local ollama server for a keyless, offline model - the "
-        "audit itself never needs an LLM")
+        "no LLM key found: run `thousand-eyes --setup` (gemini free tier or claude) "
+        "- the audit itself never needs an LLM, only the chat and the narrative do")
 
 
 # ------------------------------------------------------------------ claude
@@ -278,9 +241,8 @@ class GeminiClient(_BaseLLM):
                         "this gemini key's project has no free-tier access "
                         "(google disabled it for this project). enable it at "
                         "aistudio.google.com/billing, or run `thousand-eyes "
-                        "--setup claude <key>`, or start a local ollama "
-                        "server for a keyless free model. the audit itself "
-                        "never needs an LLM")
+                        "--setup claude <key>`. the audit itself never needs "
+                        "an LLM - only the chat and the narrative do")
                 raise RuntimeError(f"gemini {r.status_code}: {body}")
             async for line in r.aiter_lines():
                 if not line.startswith("data:"):
@@ -305,51 +267,6 @@ class GeminiClient(_BaseLLM):
                     stats["prompt_tokens"] = usage.get("promptTokenCount", 0)
                     stats["completion_tokens"] = usage.get("candidatesTokenCount", 0)
                     stats["total_tokens"] = usage.get("totalTokenCount", 0)
-
-
-# ------------------------------------------------------------------ ollama
-
-
-class OllamaClient(_BaseLLM):
-    """A LOCAL model through ollama - completely free, no key, no account,
-    no data leaving the machine. The best free path when a hosted free tier
-    is unavailable."""
-
-    provider = "ollama"
-
-    def __init__(self, model: str = "qwen2.5") -> None:
-        self.model = model or "qwen2.5"
-        self.base = OLLAMA_URL
-        self.ttft_last_ms = 0.0
-
-    async def aclose(self) -> None:
-        return None
-
-    async def chat(self, messages: List[Dict[str, str]]) -> AsyncIterator[Tuple[str, Dict]]:
-        system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
-        convo = [{"role": m["role"], "content": m["content"]}
-                 for m in messages if m["role"] != "system"]
-        payload: Dict[str, Any] = {"model": self.model, "messages": convo,
-                                   "stream": False}
-        if system:
-            payload["system"] = system
-        t0 = time.monotonic()
-        stats: Dict[str, Any] = {}
-        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=5)) as http:
-            try:
-                r = await http.post(f"{self.base}/api/chat", json=payload)
-            except httpx.HTTPError as exc:
-                raise RuntimeError(f"ollama unreachable at {self.base}: {exc}") from exc
-            if r.status_code >= 400:
-                body = r.text[:200]
-                raise RuntimeError(f"ollama {r.status_code}: {body}")
-            data = r.json()
-        stats["ttft_ms"] = (time.monotonic() - t0) * 1000
-        text = ((data.get("message") or {}).get("content") or "").strip()
-        if text:
-            yield text, stats
-        if data.get("eval_count"):
-            stats["completion_tokens"] = int(data.get("eval_count") or 0)
 
 
 # backwards-compatible name: the default provider client is Claude
