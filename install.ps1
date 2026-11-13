@@ -1,6 +1,6 @@
 # thousand-eyes one-line installer (Windows / PowerShell)
 #
-#   powershell -c "irm https://raw.githubusercontent.com/janedoe/thousand-eyes/main/install.ps1 | iex"
+#   powershell -c "irm https://raw.githubusercontent.com/harshaxyZ/thousand-eyes/main/install.ps1 | iex"
 #
 # What it does:
 #   1. finds a python 3.10+ (py launcher, python3, python)

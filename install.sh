@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # thousand-eyes one-line installer (macOS / Linux)
 #
-#   curl -fsSL https://raw.githubusercontent.com/janedoe/thousand-eyes/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/harshaxyZ/thousand-eyes/main/install.sh | bash
 #
 # What it does:
 #   1. finds a python 3.10+ (python3, python)

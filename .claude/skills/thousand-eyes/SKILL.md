@@ -10,7 +10,7 @@ confirmed pivot outwards and ranks what an attacker could do with it.
 
 ## Two commands
 
-1. install the CLI:    pipx install thousand-eyes
+1. install the CLI:    pipx install "git+https://github.com/harshaxyZ/thousand-eyes.git"
 2. install this skill: thousand-eyes skill install
 
 ## Bonus

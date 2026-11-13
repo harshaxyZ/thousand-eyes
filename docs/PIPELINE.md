@@ -38,7 +38,7 @@ twitter.com/…         profile URL proves the handle "janedoe"
 |-------|--------------|----------------------|
 | 0 - SEED | the operator's identifier is checked by every module that speaks its type | email / username / domain / url / phone arms |
 | 1 - DIRECT | the seed's confirmed pivots become leads (a name, a profile URL, a domain) | same arms, per lead type |
-| 2 - SPREAD | every confirmed **profile URL** proves the **handle** it lives on, so the handle becomes a lead | the full username arm (18 platform modules + the 692-site sweep) |
+| 2 - SPREAD | every confirmed **profile URL** proves the **handle** it lives on, so the handle becomes a lead | the full username arm (15 platform lookups, the 692-site sweep, the dark-web index, exact-document search) |
 | 3+ - DEEP | the new accounts link to new URLs, the new URLs prove new handles | repeats until depth/budget stops it |
 
 Stage 2 is the hinge of the whole thing: a confirmed profile URL is proof
@@ -49,7 +49,7 @@ That is how one email turns into a map of a person's accounts.
 
 * **Never invent a handle.** Handles only come from response-confirmed
   profile URLs (gravatar, commit search, a WMN hit) or from the operator.
-  Never from the email local-part (that is `--wild`, and it is opt-in).
+  Never from the email local-part (that is `--full`, and it is opt-in).
 * **Never merge identities.** The same handle on two platforms is *handle
   reuse*, not one person. Accounts are tagged `[confirmed]` or
   `[handle-reuse - same person unconfirmed]`.
@@ -59,14 +59,22 @@ That is how one email turns into a map of a person's accounts.
 ## The API bridge
 
 `src/thousand_eyes/registry.py` is the single list of every source the tool
-can call, and which lead types each one answers. The deterministic engine
-and the LLM tool layer are both generated from it, so a new source is added
-exactly once and works everywhere.
+can call, and which lead types each one answers. The deterministic engine,
+the LLM tool layer and the agent's lead routing are all generated from it,
+so a new source is added exactly once and works everywhere.
+
+Inside one lead the modules run concurrently (at most 6 at a time, each
+against its own first-party host). Their results are folded into the graph
+in registry order, so the same inputs always build the same graph.
 
 ```python
 ModuleSpec("github-profile", ("username",), _simple(github_profile.run),
            "engine.github-profile", "GitHub profile existence + metadata", ("username",))
 ```
+
+Search dorks (`web-dorks`) are the one arm that runs for seeds only: search
+engines rate-limit fast, and their hits are unverified mentions, so they
+are listed as ambient rows and never fed back into the cascade.
 
 ## The budgets
 
@@ -92,4 +100,5 @@ tool fast. Raise the time budget for a deeper sweep.
 3. **WHAT IT FOUND** - every confirmed item with its evidence source.
 4. **CHECKS THAT FAILED** - every source that errored, with the real
    reason, and a coverage line telling you how much of the sweep actually
-   answered.
+   answered. A source that answered but lost some sub-checks (one site of
+   the sweep timing out) is counted as answered "only partly".

@@ -17,7 +17,7 @@ Anything you add must respect the hard rules enforced in code:
 1. Fork, then create a branch from `main`.
 2. Keep modules small and typed; every finding is an evidence row, never a
    bare string.
-3. Run the tests: `py -3 -m pytest -q`. New modules need at least one test
+3. Run the tests: `pip install -e ".[dev,banner]"` once, then `py -3 -m pytest -q`. New modules need at least one test
    that proves they refuse to fire without confirmation.
 4. New dependencies pass the 3-phase gate first (see
    `research/dependency-gate-3phase.md`). Default answer is "no new deps".

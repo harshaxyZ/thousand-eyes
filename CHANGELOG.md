@@ -1,5 +1,60 @@
 # Changelog
 
+## Unreleased
+
+- **Search dorking as a registry source** (`modules/dorks.py`): every seed
+  is expanded into exact-phrase dorks (paste sites, exposed documents,
+  code hosts, leak chatter, `site:` and exposed-file sets for a domain).
+  Google through `SERPER_API_KEY` or `GOOGLE_CSE_API_KEY` + `GOOGLE_CSE_ID`;
+  otherwise Bing, DuckDuckGo and Mojeek in rotation. Hits are `web mention`
+  rows, never pivots. Because it is a registry source it runs in the
+  default cascade, the TUI and the agent (`dork.email`, `dork.username`,
+  `dork.domain`, `dork.phone`, `dork.url`).
+- **LeakCheck public index** (keyless): which breaches list an email and
+  which field types leaked. Names only, never records.
+- **Hudson Rock is keyless now.** The module needed a key and read a field
+  the live API no longer returns, so it never reported anything. It uses
+  the free osint-tools endpoint and the current response shape.
+- **The dark-web index works again.** Ahmia rotates its hidden form token;
+  the hardcoded one had expired, so every search came back inconclusive.
+  The token is now read from the live search form. Domains are searched
+  too, not only emails and usernames.
+- Agent: `search.google` and `search.bing` tools; `--agent --full` sweeps
+  all 692 sites for seed usernames; breach, darknet and infrastructure rows
+  are kept as separate ledger rows (they used to collapse into one); the
+  paste-index tool reports a blocked search as inconclusive.
+- **Agent mode walks every lead.** A round used to fire each tool once, for
+  the first lead of its kind only; every lead in the round now gets every
+  tool for its type. Leads are remembered across rounds, so one is never
+  walked twice.
+- **Agent routing is generated from the registry.** The hand-written tool
+  list named three tools that did not exist (`engine.dns`, `engine.domain`,
+  `engine.darkweb-index`) and skipped 12 of the 16 username sources. The
+  self-audit prompt now lists exact tool names, so the model can pick site
+  probes and search tools.
+- **The fence covers every request.** It is a request hook on the agent's
+  HTTP client: engine, search, dork and dark tools (and redirect hops) pass
+  through the onion/auth-path block and the per-domain bucket, not only the
+  site probes. A fenced URL is an inconclusive result, never a crash.
+- **Modules of one lead run concurrently** (6 at a time) and are folded into
+  the graph in registry order, so runs are faster and still reproducible.
+- **Partial is not failed.** A sweep with a few dead sites is counted as
+  answered "only partly" in the coverage line; the dead sites stay listed
+  under "checks that failed".
+- `--agent-budget` now caps LLM calls only; tool calls have their own cap
+  (400) that is applied before a batch fires.
+- `--depth` defaults to 4 in the CLI, same as the TUI and the docs (was 3).
+- `--model claude-*` uses the Anthropic key and any other model the Gemini
+  key; a key for one provider is never sent to the other.
+- Fixed: the dork tools raised on their first hit; the breach counter in
+  the agent analytics never moved; the per-domain bucket stalled every host
+  while one waited; a crashing tool took the whole batch down.
+- The User-Agent carries the real version instead of a hardcoded 0.4.
+- Removed the npm wrapper (`package.json`, `bin/`): it was never published.
+  Install with pipx from git. The install one-liners point at the real
+  repository.
+- `pytest` works from a plain checkout (`pythonpath = src`).
+
 ## 0.7.0 (2026-11-13)
 
 - **The cascade is the product now.** One lead in, and every confirmed
