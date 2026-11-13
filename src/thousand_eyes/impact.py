@@ -99,6 +99,7 @@ _LEAF_RULES: tuple[tuple[str, int, str], ...] = (
     ("stealer log", WEAPONISED, "infostealer log entry - machine shows stored credentials for this identity"),
     ("breach", PIVOTABLE, "breach exposure - attacker knows this account exists in a dump"),
     ("darknet", AMBIENT, "darknet-indexed mention"),
+    ("web mention", AMBIENT, "search-engine hit - indexed next to this identifier, page not verified"),
     ("mail inf", AMBIENT, "mail infrastructure"),
 )
 

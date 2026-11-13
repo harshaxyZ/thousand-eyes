@@ -145,7 +145,10 @@ def _coverage_line(result: ScanResult) -> str:
     skipped. A thin coverage is itself a finding - the operator should know
     the dossier is partial."""
     sources = result.meta.get("sources") or {}
-    ok = sum(v.get("ok", 0) for v in sources.values())
+    # partial = the source answered but some of its sub-checks did not (one
+    # site of a 120-site sweep timing out). It counts as answered, and says so.
+    partial = sum(v.get("partial", 0) for v in sources.values())
+    ok = sum(v.get("ok", 0) for v in sources.values()) + partial
     failed = sum(v.get("failed", 0) for v in sources.values())
     skipped = sum(v.get("skipped", 0) for v in sources.values())
     total = ok + failed + skipped
@@ -153,7 +156,8 @@ def _coverage_line(result: ScanResult) -> str:
         return ""
     pct = int(round(100 * ok / total))
     thin = "  <- thin coverage: most sources did not answer" if pct < 50 else ""
-    return f"source coverage: {ok} answered · {failed} failed · {skipped} skipped ({pct}% of {total} checks){thin}"
+    part = f" ({partial} only partly)" if partial else ""
+    return f"source coverage: {ok} answered{part} · {failed} failed · {skipped} skipped ({pct}% of {total} checks){thin}"
 
 
 def _stage_table(result: ScanResult) -> list[str]:

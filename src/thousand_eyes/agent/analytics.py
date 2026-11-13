@@ -88,7 +88,8 @@ class Analytics:
         self.pivots += 1
 
     def budget_hit(self) -> bool:
-        self.budget_calls += 1
+        """True once the tool budget is spent (a pure check: the planner
+        counts each tool call itself)."""
         return self.budget_calls >= self.budget_calls_max
 
     # -------------------------------------------------------------- report

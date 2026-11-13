@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import httpx
 
-USER_AGENT = "thousand-eyes/0.4 (self-audit tool; reads only public first-party endpoints)"
+from thousand_eyes import __version__
+
+USER_AGENT = f"thousand-eyes/{__version__} (self-audit tool; reads only public first-party endpoints)"
 
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 

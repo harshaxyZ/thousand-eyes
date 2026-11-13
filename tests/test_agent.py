@@ -57,7 +57,9 @@ async def test_planner_full_pipeline_fence_and_report():
     # round 2+ empty -> loop ends. Synthesis returns a fixed report.
     fake = FakeLLM(["[]", _audit_reply(["engine.wayback"]), "[]"],
                    "# Final Report\n\nAll clear.\n")
-    planner = Planner(fake, goal="test", budget_calls=10)
+    # fixture transport: this test must never touch the live network
+    planner = Planner(fake, goal="test", budget_calls=10,
+                      transport=demo_transport())
 
     report = await planner.run(["demo.subject@example.com"])
 

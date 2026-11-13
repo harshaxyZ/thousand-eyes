@@ -1,7 +1,9 @@
-﻿"""The API bridge.
+"""The API bridge.
 
-One registry that declares every free, keyless, first-party endpoint the tool
-knows how to call, and which lead types each one answers. Both the
+One registry that declares every free, first-party endpoint the tool knows
+how to call, and which lead types each one answers. Almost all of them are
+keyless; the one that needs the operator's own key (HIBP) reports `skipped`
+without it, never a clean negative. Both the
 deterministic engine (scan.py) and the LLM agent tool layer (agent/tools.py)
 are GENERATED from this file - so a new source is added exactly once and
 works in every path.
@@ -18,7 +20,7 @@ Rules baked into this file:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 import httpx
@@ -35,6 +37,7 @@ from thousand_eyes.modules import (
     dockerhub_profile,
     dns_module,
     domains,
+    dorks,
     email_checks,
     exact_document,
     fetch,
@@ -45,6 +48,7 @@ from thousand_eyes.modules import (
     hackernews_user,
     hibp,
     keybase_proofs,
+    leakcheck,
     lichess_profile,
     mastodon_lookup,
     pgp,
@@ -140,6 +144,25 @@ async def _darkweb_note(client: httpx.AsyncClient, term: str, ctx: Ctx) -> dict:
     return res
 
 
+def _dorks(kind: str):
+    """web-dorks adapter: the dork set depends on the lead type."""
+    async def _run(client: httpx.AsyncClient, value: str, ctx: Ctx) -> dict:
+        return await dorks.run(client, value, kind)
+    return _run
+
+
+_DORK_DESC = ("Search-engine dork set for {a} {kind}: paste sites, exposed "
+              "documents, code hosts (Google when a key is set, else Bing/DDG/Mojeek)")
+
+
+def _dork_spec(kind: str) -> "ModuleSpec":
+    # seeds only (max_depth=0): search engines rate-limit fast, and a dork
+    # set per spawned lead would burn the whole budget on block pages
+    article = "an" if kind[0] in "aeiou" else "a"
+    return ModuleSpec("web-dorks", (kind,), _dorks(kind), f"dork.{kind}",
+                      _DORK_DESC.format(a=article, kind=kind), (kind,), max_depth=0)
+
+
 async def _breach_existence(client: httpx.AsyncClient, email: str, ctx: Ctx) -> dict:
     return await breach_existence.run(client, email)
 
@@ -156,13 +179,16 @@ MODULES: list[ModuleSpec] = [
                "engine.gravatar", "Gravatar profile + hash exposure for an email",
                ("email",)),
     ModuleSpec("hibp", ("email",), _simple(hibp.run),
-               "engine.hibp", "Have I Been Pwned breach existence for an email (keyless)",
+               "engine.hibp", "Have I Been Pwned breach existence for an email (needs HIBP_API_KEY)",
                ("email",)),
     ModuleSpec("breach-existence", ("email",), _breach_existence,
                "engine.xposed", "XposedOrNot breach existence for an email", ("email",)),
     ModuleSpec("hudsonrock", ("email",), _hudsonrock,
-               "engine.hudsonrock", "Hudson Rock credential-breach exposure for an email",
+               "engine.hudsonrock", "Hudson Rock infostealer-log exposure for an email (keyless)",
                ("email",)),
+    ModuleSpec("leakcheck", ("email",), _simple(leakcheck.run),
+               "engine.leakcheck", "LeakCheck public index: which breaches list an email, "
+               "and which field types leaked (keyless, names only)", ("email",)),
     ModuleSpec("github-commit-search", ("email",), _simple(github_commit_search.run),
                "engine.github-commits", "GitHub commit search by email (public code)",
                ("email",)),
@@ -183,9 +209,16 @@ MODULES: list[ModuleSpec] = [
     ModuleSpec("exact-document", ("email", "phone", "username"), _simple(exact_document.run),
                "engine.exact-document", "Exact-document web search for the identifier",
                ("email", "phone", "username")),
-    ModuleSpec("darkweb", ("email", "username"), _darkweb_note,
+    ModuleSpec("darkweb", ("email", "username", "domain"), _darkweb_note,
                "engine.darkweb", "Darknet index mentions (ahmia clearnet index only)",
-               ("email", "username"), self_tallying=True),
+               ("email", "username", "domain"), self_tallying=True),
+
+    # ------------------------------------------- search dorks (every type)
+    _dork_spec("email"),
+    _dork_spec("username"),
+    _dork_spec("domain"),
+    _dork_spec("phone"),
+    _dork_spec("url"),
 
     # ------------------------------------------------------- username leads
     ModuleSpec("username-sweep", ("username",),

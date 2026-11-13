@@ -1,44 +1,41 @@
-"""The Thousand Eyes instrument panel - 150+ read-only OSINT tools.
+"""The Thousand Eyes instrument panel - 160+ read-only OSINT tools.
 
 Families:
-  engine.*    wraps of the proven v0.4 wildfire modules (evidence-only)
-  search.*    free web-search engines (DDG html, Mojeek, Marginalia, Wikipedia)
-  dork.*      google/bing dork ALGORITHMS: expand a lead into K exact queries
-  breach.*    breach *existence* indexes (never dumps)
+  engine.*    the registry modules (evidence-only), one tool per source
+  dork.*      the registry's web-dorks module, one tool per lead type:
+              a lead expanded into exact queries with search operators
+              (Google through an API key, else Bing/DDG/Mojeek)
+  search.*    one free-text query on one engine (Google, Bing, DDG, Mojeek,
+              Marginalia, Wikipedia)
   dark.*      dark-web INDEX presence (ahmia clearnet index; never .onion fetch)
   site.*      per-site username presence probes generated from the bundled
               692-site WhatsMyName dataset ({account} placeholder semantics)
 
 Safety fence (enforced here, not in the model):
   - no .onion resolution, no auth probing, no form submission, no password tests
-  - per-domain token bucket (300ms) + global concurrency cap 8 (laptop-safe)
+  - per-domain token bucket (300ms) + connection cap 8 (laptop-safe)
   - every result carries evidence_url + status; blocked == inconclusive
+
+The fence is a request hook on the shared httpx client, so it covers every
+outbound request of every tool family (and every redirect hop), not only the
+calls that go through SafeClient.get().
 """
 
 from __future__ import annotations
 
 import asyncio
-import importlib
 import json
 import re
 import time
 from dataclasses import dataclass, field
 from importlib import resources
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List
 from urllib.parse import quote, unquote, urlparse
 
 import httpx
-import yaml
 
-from thousand_eyes import registry
-from thousand_eyes.modules import (
-    breach_existence, bluesky_profile, chess_profile, darkweb,
-    dockerhub_profile, dns_module, domains, email_checks,
-    exact_document, fetch, github_commit_search, github_profile, gitlab_profile,
-    gravatar, hackernews_user, hibp, keybase_proofs, mastodon_lookup, pgp,
-    reddit_user, registration_leaves, security_headers, username_checks,
-    userrealm, wayback,
-)
+from thousand_eyes import __version__, registry
+from thousand_eyes.modules import darkweb, dorks
 
 # ------------------------------------------------------------------- types
 
@@ -65,6 +62,15 @@ class Tool:
     desc: str
     inputs: List[str]
     fn: Callable[..., Awaitable[ToolResult]]
+    #: lead kinds this tool can take (empty = any kind)
+    accepts: tuple = ()
+    #: only fired for leads at/below this round (None = every round)
+    max_depth: int | None = None
+    #: built from a registry ModuleSpec (understands the _all_sites option)
+    from_registry: bool = False
+
+    def takes(self, kind: str) -> bool:
+        return not self.accepts or kind in self.accepts
 
 
 # ------------------------------------------------------------ safety fence
@@ -82,44 +88,66 @@ def _safe_url(url: str) -> bool:
     return True
 
 
+class FencedURL(httpx.RequestError):
+    """A request the fence refused. It is an httpx error on purpose: modules
+    already treat transport errors as INCONCLUSIVE, so a fenced URL can never
+    crash a sweep or be laundered into a negative."""
+
+
 class DomainBucket:
     """Per-domain token bucket: 1 request / 300ms."""
 
+    GAP = 0.3
+
     def __init__(self) -> None:
-        self._last: Dict[str, float] = {}
+        self._next: Dict[str, float] = {}
         self._lock = asyncio.Lock()
 
     async def wait(self, host: str) -> None:
+        # reserve the slot under the lock, sleep outside it - one slow host
+        # must not stall requests to every other host
         async with self._lock:
             now = time.monotonic()
-            last = self._last.get(host, 0.0)
-            gap = 0.3 - (now - last)
-            if gap > 0:
-                await asyncio.sleep(gap)
-            self._last[host] = max(last, now) + max(gap, 0.0)
+            slot = max(now, self._next.get(host, 0.0))
+            self._next[host] = slot + self.GAP
+        if slot > now:
+            await asyncio.sleep(slot - now)
 
 
 BUCKET = DomainBucket()
-_SEM = asyncio.Semaphore(8)          # global concurrency: laptop-safe
+
+
+async def _fence_hook(request: httpx.Request) -> None:
+    """Runs before EVERY outbound request of the agent's http client."""
+    url = str(request.url)
+    if not _safe_url(url):
+        raise FencedURL(f"fenced URL: {url}", request=request)
+    await BUCKET.wait(request.url.host or "global")
 
 
 class SafeClient:
-    """AsyncClient wrapper that enforces the fence on every request."""
+    """AsyncClient wrapper that enforces the fence on every request.
 
-    def __init__(self) -> None:
+    `http` is the underlying httpx client that engine modules, search and
+    dork tools use directly; the fence hook is installed on it, so there is
+    no path around it. `transport` is for tests and --demo (fixture replay).
+    """
+
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self.http = httpx.AsyncClient(
             timeout=httpx.Timeout(10, connect=5),
             limits=httpx.Limits(max_connections=8, max_keepalive_connections=8),
             headers={"User-Agent":
-                     "Mozilla/5.0 (compatible; ThousandEyes/1.0; self-audit)"},
+                     f"Mozilla/5.0 (compatible; thousand-eyes/{__version__}; self-audit)"},
+            follow_redirects=True,     # same as the engine; each hop is fenced
+            event_hooks={"request": [_fence_hook]},
+            transport=transport,
         )
 
     async def get(self, url: str, **kw: Any) -> httpx.Response:
         if not _safe_url(url):
             raise PermissionError(f"fenced URL: {url}")
-        await BUCKET.wait(urlparse(url).hostname or "global")
-        async with _SEM:
-            return await self.http.get(url, **kw)
+        return await self.http.get(url, **kw)
 
     async def aclose(self) -> None:
         await self.http.aclose()
@@ -134,27 +162,56 @@ def _result(tool: str, fn, t0: float, ok: bool, summary: str,
                       ms=(time.monotonic() - t0) * 1000, error=error)
 
 
-def _flatten(module_out: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _flatten(module_out: Dict[str, Any], tool: str = "") -> List[Dict[str, Any]]:
+    """Module output -> evidence rows the ledger can dedup and cite.
+
+    Modules return pivots ({type, value, source, evidence_url, snippet}) and
+    leaves ({site, url, status, category}). A leaf has no kind/value of its
+    own, so without this mapping every leaf of a run collapsed into a single
+    ledger row.
+    """
     rows: List[Dict[str, Any]] = []
-    for key in ("findings", "leaves", "nodes", "results", "pivots", "entries", "items"):
-        val = module_out.get(key) if isinstance(module_out, dict) else None
+    if not isinstance(module_out, dict):
+        return rows
+    for p in module_out.get("pivots") or []:
+        if isinstance(p, dict):
+            rows.append({"kind": p.get("type", ""), **p})
+    for leaf in module_out.get("leaves") or []:
+        if isinstance(leaf, dict):
+            rows.append({
+                "kind": leaf.get("category") or "leaf",
+                "value": leaf.get("site", ""),
+                "source": tool or leaf.get("category", ""),
+                "evidence_url": leaf.get("url", ""),
+                "snippet": leaf.get("snippet") or leaf.get("site", ""),
+                "status": leaf.get("status"),
+            })
+    for key in ("findings", "nodes", "results", "entries", "items"):
+        val = module_out.get(key)
         if isinstance(val, list):
             rows.extend(item for item in val if isinstance(item, dict))
     return rows
 
 
-def _wrap(name: str, family: str, desc: str, inputs: List[str], call):
+def _wrap(name: str, family: str, desc: str, inputs: List[str], call,
+          accepts: tuple = ()):
     async def fn(client: SafeClient, **kw: Any) -> ToolResult:
         t0 = time.monotonic()
         try:
             out = await call(client.http, **kw)
-            findings = _flatten(out)
-            summary = out.get("summary") or out.get("note") or json.dumps(out)[:200]
-            return _result(name, call, t0, True, str(summary)[:400], findings)
+            findings = _flatten(out, name)
+            summary = out.get("summary") or out.get("note") or (
+                f"{len(findings)} finding(s), "
+                f"{len(out.get('errors') or [])} sub-check(s) did not answer")
+            # a module that reports a hard error did not answer: inconclusive
+            hard = out.get("error")
+            return _result(name, call, t0, not hard, str(summary)[:400], findings,
+                           error=str(hard or "")[:200])
         except Exception as exc:  # noqa: BLE001 - record, never crash the run
             return _result(name, call, t0, False, "", [],
                            error=f"{type(exc).__name__}: {exc}"[:200])
-    return Tool(name=name, family=family, desc=desc, inputs=inputs, fn=fn)
+    return Tool(name=name, family=family, desc=desc, inputs=inputs, fn=fn,
+                accepts=accepts)
 
 
 # ------------------------------------------------------------ engine tools
@@ -171,6 +228,7 @@ def _from_spec(spec) -> Tool:
     arg = spec.inputs[0] if spec.inputs else "seed"
 
     async def call(client, **kw):
+        all_sites = bool(kw.pop("_all_sites", False))
         value = ""
         for candidate in kw.values():
             if isinstance(candidate, str) and candidate:
@@ -178,9 +236,15 @@ def _from_spec(spec) -> Tool:
                 break
         if not value:
             raise ValueError(f"{spec.tool_name}: no value supplied")
-        return await spec.fn(client, value, Ctx())
+        return await spec.fn(client, value, Ctx(all_sites=all_sites))
 
-    return _wrap(spec.tool_name, "engine", spec.desc or spec.label, [arg], call)
+    # the family is the name prefix: engine.github-profile, dork.email, ...
+    tool = _wrap(spec.tool_name, spec.tool_name.split(".")[0],
+                 spec.desc or spec.label, [arg], call,
+                 accepts=tuple(spec.lead_types))
+    tool.max_depth = spec.max_depth
+    tool.from_registry = True
+    return tool
 
 
 ENGINE_TOOLS: List[Tool] = [
@@ -188,31 +252,6 @@ ENGINE_TOOLS: List[Tool] = [
 ]
 
 # ---------------------------------------------------------- search engines
-
-
-async def _ddg(client: httpx.AsyncClient, q: str) -> List[Dict[str, str]]:
-    r = await client.get("https://html.duckduckgo.com/html/", params={"q": q})
-    out = []
-    for m in re.finditer(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>\s*'
-                         r'(?:<a[^>]*class="result__snippet"[^>]*>(.*?)</a>)?', r.text, re.S):
-        url, title, snip = m.group(1), m.group(2), (m.group(3) or "")
-        um = re.search(r"uddg=([^&]+)", url)
-        if um:
-            url = unquote(um.group(1))
-        out.append({"url": url, "title": re.sub("<[^>]+>", "", title)[:120],
-                    "snippet": re.sub("<[^>]+>", "", snip)[:220], "engine": "ddg"})
-    return out[:8]
-
-
-async def _mojeek(client: httpx.AsyncClient, q: str) -> List[Dict[str, str]]:
-    r = await client.get("https://www.mojeek.com/search", params={"q": q})
-    out = []
-    for m in re.finditer(r'<a class="title[^"]*" href="(https?://[^"]+)"[^>]*>(.*?)</a>.*?'
-                         r'(?:<p class="s">(.*?)</p>)?', r.text, re.S):
-        out.append({"url": m.group(1), "title": re.sub("<[^>]+>", "", m.group(2))[:120],
-                    "snippet": re.sub("<[^>]+>", "", m.group(3) or "")[:220],
-                    "engine": "mojeek"})
-    return out[:8]
 
 
 async def _marginalia(client: httpx.AsyncClient, q: str) -> List[Dict[str, str]]:
@@ -233,6 +272,26 @@ async def _wikipedia(client: httpx.AsyncClient, q: str) -> List[Dict[str, str]]:
              "title": t, "snippet": "", "engine": "wikipedia"} for t in data[1]]
 
 
+async def _google(client: httpx.AsyncClient, q: str) -> List[Dict[str, str]]:
+    provider = dorks.google_provider()
+    if provider is None:
+        raise RuntimeError("no Google key: set SERPER_API_KEY, or "
+                           "GOOGLE_CSE_API_KEY + GOOGLE_CSE_ID")
+    return (await provider[1](client, q))[:8]
+
+
+async def _ddg(client: httpx.AsyncClient, q: str) -> List[Dict[str, str]]:
+    return (await dorks.ddg(client, q))[:8]
+
+
+async def _mojeek(client: httpx.AsyncClient, q: str) -> List[Dict[str, str]]:
+    return (await dorks.mojeek(client, q))[:8]
+
+
+async def _bing(client: httpx.AsyncClient, q: str) -> List[Dict[str, str]]:
+    return (await dorks.bing(client, q))[:8]
+
+
 def _search_tool(slug: str, label: str, fn) -> Tool:
     async def call(client: SafeClient, q: str) -> ToolResult:
         t0 = time.monotonic()
@@ -245,11 +304,15 @@ def _search_tool(slug: str, label: str, fn) -> Tool:
         except Exception as exc:  # noqa: BLE001
             return _result(slug, fn, t0, False, "", [], error=str(exc)[:200])
     return Tool(name=f"search.{label}", family="search",
-                desc=f"Free web search via {label} (no API key).",
+                desc=f"One free-text web search via {label}"
+                     + (" (needs SERPER_API_KEY or GOOGLE_CSE_API_KEY + GOOGLE_CSE_ID)."
+                        if label == "google" else " (no API key)."),
                 inputs=["q"], fn=call)
 
 
 SEARCH_TOOLS = [
+    _search_tool("google", "google", _google),
+    _search_tool("bing", "bing", _bing),
     _search_tool("ddg", "duckduckgo", _ddg),
     _search_tool("mojeek", "mojeek", _mojeek),
     _search_tool("marginalia", "marginalia", _marginalia),
@@ -258,54 +321,9 @@ SEARCH_TOOLS = [
 
 # -------------------------------------------------------------- dork layer
 
-
-def _dork_queries(kind: str, value: str) -> List[str]:
-    v = value.strip()
-    if kind == "email":
-        return [f'"{v}"', f'"{v}" breach', f'"{v}" paste', f'"{v}" -linkedin -github',
-                f'"{v}" filetype:pdf', f'"{v}" "password"']
-    if kind == "username":
-        return [f'"{v}"', f'"{v}" site:github.com', f'"{v}" inurl:profile',
-                f'"{v}" site:reddit.com', f'"{v}" -twitter -instagram']
-    if kind == "domain":
-        return [f'site:{v}', f'inurl:{v}', f'"{v}" filetype:pdf', f'"{v}" -www',
-                f'site:{v} filetype:xls']
-    if kind == "url":
-        return [f'"{v}"', f'cache:{v}', f'related:{v}']
-    return [f'"{v}"']
-
-
-def _dork_tool(kind: str) -> Tool:
-    async def call(client: SafeClient, value: str) -> ToolResult:
-        t0 = time.monotonic()
-        queries = _dork_queries(kind, value)
-        rows: List[Dict[str, Any]] = []
-        engines = (_ddg, _mojeek)
-        for i, query in enumerate(queries):
-            engine = engines[i % len(engines)]
-            try:
-                hits = await engine(client.http, query)
-                for h in hits[:4]:
-                    rows.append({"value": h["url"], "kind": "url",
-                                 "source": f"dork.{kind}", "evidence_url": h["url"],
-                                 "snippet": h.get("snippet", ""),
-                                 "title": h.get("title", ""), "query": query})
-            except Exception:  # noqa: BLE001 - one dead engine never kills the dork
-                continue
-        seen, uniq = set(), []
-        for r in rows:
-            if r["url"] not in seen:
-                seen.add(r["url"])
-                uniq.append(r)
-        return _result(f"dork.{kind}", call, t0, True,
-                       f"{len(uniq)} unique hits from {len(queries)} dorks", uniq[:40])
-    return Tool(name=f"dork.{kind}", family="dork",
-                desc=f"Dork algorithm for a {kind}: {len(_dork_queries(kind, 'x'))} exact "
-                     f"queries fanned over DDG+Mojeek (google/bing style operators).",
-                inputs=["value"], fn=call)
-
-
-DORK_TOOLS = [_dork_tool(k) for k in ("email", "username", "domain", "url")]
+#: dork.<kind> tools are registry modules (modules/dorks.py): the same dork
+#: set runs in the default cascade, the TUI and the agent
+DORK_TOOLS = [t for t in ENGINE_TOOLS if t.family == "dork"]
 
 # ---------------------------------------------------- breach + dark indexes
 
@@ -313,17 +331,23 @@ DORK_TOOLS = [_dork_tool(k) for k in ("email", "username", "domain", "url")]
 async def _paste_presence(client: SafeClient, term: str) -> ToolResult:
     t0 = time.monotonic()
     rows = []
-    for q in (f'site:pastebin.com "{term}"', f'site:ghostbin.com "{term}"',
-              f'site:github.io "{term}"'):
+    answered = 0
+    last_error = ""
+    for q in (f'site:pastebin.com "{term}"', f'site:rentry.co "{term}"',
+              f'site:justpaste.it "{term}"'):
         try:
-            hits = await _ddg(client.http, q)
-            rows.extend({"value": h["url"], "kind": "url", "source": "dark.paste-index",
-                         "evidence_url": h["url"], "snippet": h.get("snippet", "")[:200],
-                         "title": h.get("title", "")} for h in hits[:3])
-        except Exception:  # noqa: BLE001
+            hits = await dorks.ddg(client.http, q)
+        except Exception as exc:  # noqa: BLE001 - one blocked query never kills the tool
+            last_error = f"{type(exc).__name__}: {exc}"[:200]
             continue
-    return _result("dark.paste-index", _paste_presence, t0, True,
-                   f"{len(rows)} paste-index hits", rows)
+        answered += 1
+        rows.extend({"value": h["url"], "kind": "url", "source": "dark.paste-index",
+                     "evidence_url": h["url"], "snippet": h.get("snippet", "")[:200],
+                     "title": h.get("title", "")} for h in hits[:3])
+    # no query answered = blocked = inconclusive, never "no paste mentions"
+    return _result("dark.paste-index", _paste_presence, t0, answered > 0,
+                   f"{len(rows)} paste-index hits from {answered}/3 queries", rows,
+                   error="" if answered else last_error)
 
 
 async def _ahmia(client: SafeClient, term: str) -> ToolResult:
@@ -331,7 +355,8 @@ async def _ahmia(client: SafeClient, term: str) -> ToolResult:
     try:
         out = await darkweb.run(client.http, term)
         return _result("dark.ahmia-index", _ahmia, t0, True,
-                       str(out.get("summary", ""))[:300], _flatten(out))
+                       str(out.get("note") or "")[:300],
+                       _flatten(out, "dark.ahmia-index"))
     except Exception as exc:  # noqa: BLE001
         return _result("dark.ahmia-index", _ahmia, t0, False, "", [], error=str(exc)[:200])
 
@@ -342,12 +367,15 @@ DARK_TOOLS: List[Tool] = [
               "Index presence ONLY - the harness never fetches .onion hosts.",
          inputs=["term"], fn=_ahmia),
     Tool(name="dark.paste-index", family="dark",
-         desc="Clear-net paste-index presence (pastebin/ghostbin/github.io) for a term.",
+         desc="Clear-net paste-index presence (pastebin/rentry/justpaste) for a term.",
          inputs=["term"], fn=_paste_presence),
 ]
 
-BREACH_TOOLS = [t for t in ENGINE_TOOLS if t.name in
-                ("engine.hibp", "engine.xposed", "engine.hudsonrock")]
+#: breach *existence* indexes (never dumps): a view over ENGINE_TOOLS, not a
+#: separate family, so they are not registered twice
+BREACH_TOOL_NAMES = ("engine.hibp", "engine.xposed", "engine.hudsonrock",
+                     "engine.leakcheck")
+BREACH_TOOLS = [t for t in ENGINE_TOOLS if t.name in BREACH_TOOL_NAMES]
 
 # ------------------------------------------------------- site probe family
 
@@ -398,11 +426,11 @@ def _make_site_tool(site: Dict[str, Any]) -> Tool:
                            error=f"{type(exc).__name__}: {exc}"[:160])
     return Tool(name=f"site.{name}", family="site",
                 desc=f"Presence probe on {name}: {uri[:64]}",
-                inputs=["username"], fn=call)
+                inputs=["username"], fn=call, accepts=("username",))
 
 
 def site_tools() -> List[Tool]:
-    """130 per-site probes sampled across all 21 WMN categories."""
+    """Per-site probes sampled evenly across the WMN categories (max 130)."""
     sites = _load_wmn()
     if not sites:
         return []
@@ -418,7 +446,8 @@ def site_tools() -> List[Tool]:
 
 
 def all_tools() -> List[Tool]:
-    return ENGINE_TOOLS + SEARCH_TOOLS + DORK_TOOLS + DARK_TOOLS + BREACH_TOOLS + site_tools()
+    # DORK_TOOLS and BREACH_TOOLS are views over ENGINE_TOOLS
+    return ENGINE_TOOLS + SEARCH_TOOLS + DARK_TOOLS + site_tools()
 
 
 def tool_manifest() -> List[Dict[str, Any]]:

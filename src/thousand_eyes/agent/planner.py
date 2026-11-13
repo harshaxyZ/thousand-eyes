@@ -24,7 +24,7 @@ from .analytics import Analytics
 from .classify import classify, tools_for
 from .llm import LLMClient
 from .system_prompt import SYSTEM_PROMPT
-from .tools import Tool, all_tools
+from .tools import BREACH_TOOL_NAMES, SafeClient, Tool, ToolResult, all_tools
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 URL_RE = re.compile(r"https?://[A-Za-z0-9./_%:-]+")
@@ -41,33 +41,21 @@ BUDGET_SECONDS = 600.0
 #: safety fence summary, surfaced in the report prompt + UI
 FENCE = ("no .onion resolution · no auth probing · no form submission · "
          "no password tests · no breach dumps · per-domain 300ms bucket · "
-         "global concurrency 8 · planner executes, model selects")
-
-# tool name -> input arg name (deterministic routing, no LLM guessing)
-ARGMAP = {
-    "engine.hibp": "email", "engine.xposed": "email", "engine.hudsonrock": "email",
-    "engine.gravatar": "email", "engine.pgp": "email", "engine.userrealm": "email",
-    "engine.dns": "email", "engine.email-checks": "email",
-    "engine.registration-leaves": "email", "engine.github-commits": "email",
-    "engine.exact-document": "seed", "engine.darkweb-index": "term",
-    "dork.email": "value", "dork.username": "value", "dork.domain": "value",
-    "dork.url": "value", "dark.ahmia-index": "term", "dark.paste-index": "term",
-    "engine.username-sweep": "username", "engine.github-profile": "username",
-    "engine.reddit": "username", "engine.keybase": "username",
-    "engine.wayback": "url", "engine.fetch": "url", "engine.domain": "domain",
-}
-
+         "8 connections max · planner executes, model selects")
 
 class Planner:
     """Parallel-pipeline planner with LLM self-audit."""
 
     def __init__(self, llm: LLMClient, handlers: Optional[List[Handler]] = None,
-                 goal: str = "", budget_calls: int = TOOL_BUDGET,
-                 transport=None) -> None:
+                 goal: str = "", budget_calls: int = 120,
+                 transport=None, tool_budget: int = TOOL_BUDGET) -> None:
+        """`budget_calls` caps LLM calls (--agent-budget); `tool_budget` caps
+        tool calls. They are separate on purpose: one lead fans out into many
+        tool calls but only one audit call per round."""
         self.llm = llm
         self.tools: Dict[str, Tool] = {t.name: t for t in all_tools()}
         self.analytics = Analytics()
-        self.analytics.budget_calls_max = budget_calls
+        self.analytics.budget_calls_max = tool_budget
         self.ledger: List[Dict[str, Any]] = []
         self._seen: set = set()
         self._handlers = handlers or []
@@ -75,9 +63,11 @@ class Planner:
         self._stop = False
         self.goal = goal
         self.budget_calls = budget_calls
+        self.tool_budget = tool_budget
         self._transport = transport
-        self._own_client = None
+        self._client: Optional[SafeClient] = None
         self.fast = False          # set by run(fast=…); read by the audit loop
+        self.full = False          # set by run(full=…): seed sweeps use every site
 
     # ------------------------------------------------------------- plumbing
 
@@ -120,7 +110,8 @@ class Planner:
 
     # --------------------------------------------------------------- rounds
 
-    async def run(self, leads: List[str], goal: str = "", fast: bool = False) -> str:
+    async def run(self, leads: List[str], goal: str = "", fast: bool = False,
+                  full: bool = False) -> str:
         """Execute the full pipeline; returns the final markdown report.
 
         fast=True skips the per-round LLM self-audit (and its token cost)
@@ -129,45 +120,72 @@ class Planner:
         """
         self.goal = goal or self.goal
         self.fast = fast
+        self.full = full        # --full: the seed round sweeps all 692 sites
         self.analytics.t_start = _time.monotonic()
         self._stop = False
         await self.emit("start", {"leads": leads, "goal": self.goal})
         await self.emit("ready", {"tools": len(self.tools), "fence": FENCE})
         frontier: List[Tuple[str, str]] = [(l, classify(l)) for l in leads]
+        # every lead ever queued, across rounds: a lead is walked once
+        known: set = {(l.lower(), k) for l, k in frontier}
         depth = 0
 
         while frontier and depth <= MAX_DEPTH and not self._stop:
+            frontier = frontier[:LEADS_PER_ROUND]
             self.analytics.leads_seen += len(frontier)
-            # ---- classify + route (deterministic)
+            # ---- classify + route (deterministic): EVERY lead in the round
+            # gets every tool that answers its kind
             batch: List[Tuple[Tool, Dict[str, Any]]] = []
-            seen_tools: set = set()
-            for lead, kind in frontier[:LEADS_PER_ROUND]:
+            scheduled: set = set()
+
+            def schedule(tool: Tool, lead: str) -> None:
+                key = (tool.name, lead.lower())
+                if key in scheduled:
+                    return
+                # depth-limited sources (dork sets, header probes) only run
+                # in the rounds the registry allows
+                if tool.max_depth is not None and depth > tool.max_depth:
+                    return
+                scheduled.add(key)
+                args: Dict[str, Any] = {tool.inputs[0]: lead}
+                if self.full and depth == 0 and tool.from_registry:
+                    args["_all_sites"] = True
+                batch.append((tool, args))
+
+            for lead, kind in frontier:
                 for tname in tools_for(kind):
-                    if tname in seen_tools:
-                        continue
                     tool = self.tools.get(tname)
-                    if tool:
-                        seen_tools.add(tname)
-                        arg = ARGMAP.get(tname, "email")
-                        batch.append((tool, {arg: lead}))
+                    if tool and tool.takes(kind):
+                        schedule(tool, lead)
             # ---- self-audit: ask the LLM what's still dark
             if self.fast:
-                # fast mode: no LLM round-trip - every family in the round
-                # fires once, in registry order. Same evidence, half the wait.
+                # fast mode: no LLM round-trip - every routed tool fires once
+                # per lead. Same evidence, half the wait.
                 audit = []
                 await self.emit("step", {"label": f"round {depth}: firing "
                                      f"{len(batch)} tools (fast mode)"})
+            elif self.analytics.llm_calls >= self.budget_calls - 1:
+                audit = []      # keep the last LLM call for the report
             else:
                 audit = await self._audit(frontier, depth)
                 await self.emit("step", {"label": f"self-audit picked "
                                      f"{len(audit)} extra tool(s)"})
             for tname in audit:
                 tool = self.tools.get(tname)
-                if tool and tname not in seen_tools:
-                    seen_tools.add(tname)
-                    lead, _kind = frontier[0]
-                    arg = ARGMAP.get(tname, tool.inputs[0])
-                    batch.append((tool, {arg: lead}))
+                if not tool:
+                    continue
+                # an audit pick runs on every lead of a kind it can take
+                for lead, kind in frontier:
+                    if tool.takes(kind):
+                        schedule(tool, lead)
+            # ---- tool budget: a real cap, applied before anything fires
+            room = max(0, self.tool_budget - self.analytics.budget_calls)
+            dropped = len(batch) - room
+            if dropped > 0:
+                batch = batch[:room]
+                await self.emit("budget", {"max": self.tool_budget,
+                                           "dropped": dropped,
+                                           "reason": "tool budget reached"})
             self.analytics.pipelines_fired += len(batch)
             await self.emit("round", {"depth": depth, "tools": len(batch),
                                       "audit": audit, "ledger": len(self.ledger)})
@@ -183,8 +201,8 @@ class Planner:
                 if res.ok:
                     if tool.family == "site" and "claimed" in res.summary:
                         self.analytics.site()
-                    if tool.family == "engine" and "breach" in tool.name:
-                        self.analytics.breach(1)
+                    if tool.name in BREACH_TOOL_NAMES and res.findings:
+                        self.analytics.breach(len(res.findings))
                     if tool.family == "dork":
                         self.analytics.dork(len(res.findings))
                     if "dark" in tool.name:
@@ -194,15 +212,15 @@ class Planner:
                     new_leads.extend(self._extract_leads(text))
             # ---- next frontier: verified NEW pivots only
             nxt: List[Tuple[str, str]] = []
-            known = {(l, k) for l, k in frontier}
             for lead in new_leads:
                 kind = classify(lead)
-                if (lead, kind) not in known and kind in \
+                key = (lead.lower(), kind)
+                if key not in known and kind in \
                         ("email", "username", "domain", "url"):
-                    known.add((lead, kind))
+                    known.add(key)
                     nxt.append((lead, kind))
                     self.analytics.pivot()
-            frontier = nxt[:LEADS_PER_ROUND]
+            frontier = nxt
             depth += 1
             if self._stop or self.analytics.budget_hit() or \
                     self.analytics.elapsed_s() > BUDGET_SECONDS or \
@@ -222,7 +240,13 @@ class Planner:
     async def _call(self, tool: Tool, args: Dict[str, Any]) -> Tuple[Tool, Dict[str, Any], Any]:
         async with self._sem:
             self.analytics.budget_calls += 1
-            res = await tool.fn(self._client_shared(), **args)
+            t0 = _time.monotonic()
+            try:
+                res = await tool.fn(self._client_shared(), **args)
+            except Exception as exc:      # noqa: BLE001 - one tool never kills the batch
+                res = ToolResult(tool=tool.name, ok=False, summary="", findings=[],
+                                 ms=(_time.monotonic() - t0) * 1000,
+                                 error=f"{type(exc).__name__}: {exc}"[:200])
             self.analytics.tool_calls += 1
             if not res.ok:
                 self.analytics.tool_errors += 1
@@ -237,23 +261,17 @@ class Planner:
                                      "summary": res.summary[:120]})
             return tool, args, res
 
-    _shared_client: Any = None
-
-    def _client_shared(self):
-        from .tools import SafeClient
-        if Planner._shared_client is None:
-            Planner._shared_client = SafeClient()
-        if self._transport is not None and self._own_client is None:
-            # demo/offline mode: swap in a fenced client over the fixture transport
-            self._own_client = SafeClient()
-            self._own_client.http._transport = self._transport
-            Planner._shared_client = self._own_client
-        return Planner._shared_client
+    def _client_shared(self) -> SafeClient:
+        """One fenced client per planner (never shared between planners).
+        In demo/offline mode it rides the fixture transport."""
+        if self._client is None:
+            self._client = SafeClient(transport=self._transport)
+        return self._client
 
     async def close(self) -> None:
-        if Planner._shared_client is not None:
-            await Planner._shared_client.aclose()
-            Planner._shared_client = None
+        if self._client is not None:
+            client, self._client = self._client, None
+            await client.aclose()
 
     # ------------------------------------------------------------- self-audit
 
@@ -264,16 +282,19 @@ class Planner:
             fam = str(row.get("source", "")).split(".")[0]
             coverage[fam] = coverage.get(fam, 0) + 1
         fams = "\n".join(f"- {f}: {n} findings" for f, n in sorted(coverage.items()))
-        available = ", ".join(sorted({t.split(".")[0] for t in self.tools}))
+        # the model must answer with exact tool names, so it has to see them
+        available = ", ".join(sorted(self.tools))
         prompt = (
             f"Round {depth}. Leads on the table: "
             f"{', '.join(f'{l}({k})' for l, k in frontier[:6]) or 'none'}.\n"
             f"Evidence coverage so far:\n{fams or '(empty)'}\n"
-            f"Available tool families: {available}.\n"
+            f"Available tools (name = family.tool): {available}.\n"
+            "Every engine.* tool that answers a lead's type already runs on "
+            "it; site.* probes and search.* run only when you pick them.\n"
             "Which 2-4 tool FAMILIES are still dark and would add the most "
-            "evidence for a self-audit? Reply with ONLY a JSON array of tool "
-            "names, e.g. [\"dork.email\", \"engine.wayback\"]. If coverage is "
-            "good, reply []. No prose."
+            "evidence for a self-audit? Reply with ONLY a JSON array of exact "
+            "tool names from the list above, e.g. [\"dork.email\", "
+            "\"engine.wayback\"]. If coverage is good, reply []. No prose."
         )
         try:
             out = ""

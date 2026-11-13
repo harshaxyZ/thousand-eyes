@@ -6,9 +6,14 @@ Primary (keyless, verified live 2026-11-03):
   → exposed:  {"breaches_details":{...}, ...}  (breach NAMES only - this is
     existence-attribution, never dump contents)
 
-Optional (key): Hudson Rock stealer-log check - free API key from
-hudsonrock.com; the endpoint shape is only shipable when HUDSON_API_KEY
-is set, so it degrades to skip rather than guess a URL.
+Stealer logs (keyless, verified live 2026-11-13): Hudson Rock's free
+osint-tools endpoint
+  GET https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email?email=<email>
+  -> {"message": "...", "stealers": [{"date_compromised", "computer_name",
+      "operating_system", "total_user_services", ...}]}
+It says WHETHER an infostealer-infected machine held credentials for the
+address, and when. It never returns the credentials. HUDSON_API_KEY is
+optional: when set it is sent along, nothing else changes.
 """
 
 from __future__ import annotations
@@ -57,16 +62,16 @@ async def run(client: httpx.AsyncClient, email: str) -> dict:
     return {"pivots": [], "leaves": leaves, "error": None}
 
 
+HUDSON_URL = "https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email"
+
+
 async def run_hudsonrock(client: httpx.AsyncClient, email: str) -> dict:
-    """Optional keyed stealer-log existence check. Skips without a key; an
-    invalid key must surface as an error, never as a clean bill (hard rule #7)."""
+    """Keyless stealer-log existence check. A blocked or failing request is an
+    error, never a clean bill (hard rule #7)."""
     key = os.environ.get("HUDSON_API_KEY")
-    if not key:
-        # NOTE: no MODULE prefix here - _record adds the module label itself
-        return {"pivots": [], "leaves": [], "error": None, "skipped": "no HUDSON_API_KEY set (stealer-log check stays a manual browser step)"}
-    url = "https://cavalier.hudsonrock.com/api/json/v2/osint-tools/search-by-email"
+    headers = {"apikey": key} if key else None
     try:
-        resp = await client.get(url, params={"email": email}, headers={"apikey": key})
+        resp = await client.get(HUDSON_URL, params={"email": email}, headers=headers)
     except httpx.HTTPError as exc:
         return {"pivots": [], "leaves": [], "error": f"{MODULE}:hudsonrock: {describe_http_error(exc)}"}
     if resp.status_code != 200:
@@ -75,11 +80,24 @@ async def run_hudsonrock(client: httpx.AsyncClient, email: str) -> dict:
         data = resp.json()
     except ValueError as exc:
         return {"pivots": [], "leaves": [], "error": f"{MODULE}:hudsonrock: invalid json ({exc})"}
+    if not isinstance(data, dict):
+        return {"pivots": [], "leaves": [], "error": f"{MODULE}:hudsonrock: unexpected response shape"}
     leaves: list[dict] = []
-    tools = (data.get("stealfinder") or [])
-    if isinstance(tools, list):
-        for t in tools:
+    evidence = f"{HUDSON_URL}?email={email}"
+    # "stealers" is the live shape; "stealfinder" was the older one
+    logs = data.get("stealers") or data.get("stealfinder") or []
+    if isinstance(logs, list):
+        for t in logs:
             if not isinstance(t, dict):
                 continue
-            leaves.append({"site": f"stealer log: {t.get('machine_name') or 'unknown host'}", "url": f"{url}?email={email}", "status": resp.status_code, "category": "stealer"})
+            host = t.get("computer_name") or t.get("machine_name") or "unknown host"
+            label = f"stealer log: {host}"
+            when = str(t.get("date_compromised") or "")[:10]
+            if when:
+                label += f" (compromised {when})"
+            services = t.get("total_user_services")
+            if services:
+                label += f" - {services} saved login(s) at risk"
+            leaves.append({"site": label, "url": evidence,
+                           "status": resp.status_code, "category": "stealer"})
     return {"pivots": [], "leaves": leaves, "error": None}

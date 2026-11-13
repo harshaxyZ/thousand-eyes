@@ -27,26 +27,28 @@ def classify(lead: str) -> str:
     return "name"
 
 
+# Agent-only tools fired next to the registry modules for a lead kind. The
+# engine.* and dork.* lists are never written here: they come from
+# registry.py, so a new source reaches the agent the moment it is registered.
+# (engine.darkweb already queries the ahmia index, so dark.ahmia-index is
+# left to the self-audit instead of being fired twice.)
+_EXTRA_TOOLS = {
+    "email": ["dark.paste-index"],
+    "username": ["dark.paste-index"],
+}
+
+# kinds no registry module answers still get the exact-phrase search
+_FALLBACK_TOOLS = ["engine.exact-document"]
+
+
 def tools_for(kind: str) -> List[str]:
-    """First-round tool families for a classified lead."""
-    if kind == "email":
-        return ["engine.hibp", "engine.xposed", "engine.hudsonrock", "engine.gravatar",
-                "engine.pgp", "engine.userrealm", "engine.dns", "engine.email-checks",
-                "engine.registration-leaves", "engine.github-commits",
-                "engine.exact-document", "dork.email", "dark.ahmia-index",
-                "dark.paste-index"]
-    if kind == "username":
-        return ["engine.username-sweep", "engine.github-profile", "engine.reddit",
-                "engine.keybase", "engine.exact-document", "dork.username",
-                "dark.ahmia-index", "dark.paste-index"]
-    if kind == "domain":
-        return ["engine.domain", "engine.dns", "engine.wayback", "dork.domain",
-                "engine.exact-document"]
-    if kind == "url":
-        return ["engine.fetch", "engine.wayback", "engine.exact-document", "dork.url"]
-    if kind == "phone":
-        return ["engine.exact-document", "dork.email"]
-    return ["engine.exact-document", "dork.email"]
+    """Tools fired for a classified lead: every registry module that answers
+    this lead type (dork sets included), plus the agent-only paste tool."""
+    from thousand_eyes import registry
+
+    names = [spec.tool_name for spec in registry.modules_for(kind)]
+    names += _EXTRA_TOOLS.get(kind, [])
+    return list(dict.fromkeys(names)) or list(_FALLBACK_TOOLS)
 
 
 def pivot_kind(value: str) -> str:

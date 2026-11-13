@@ -1,8 +1,8 @@
-"""thousand-eyes - wildfire self-audit CLI (v0.5).
+"""thousand-eyes - wildfire self-audit CLI.
 
 Impact-ranked, evidence-only lead-driven pivot graph. Default mode is LLM-free
-and keyless; `--agent` adds an LLM-planned pipeline (Gemini flash-lite, free
-tier) on top of the same fenced tools. No breach dumps, no credential probes,
+and keyless; `--agent` adds an LLM-planned pipeline (Claude or Gemini,
+whichever key `--setup` stored) on top of the same fenced tools. No breach dumps, no credential probes,
 no password-reset flows. Uses only keyless, read-only, first-party public
 endpoints by default.
 
@@ -26,10 +26,10 @@ from thousand_eyes.normalise import InvalidSeed, normalise_seed
 
 DISCLAIMER = """\
 thousand-eyes v{v} - public-data self-audit (wildfire edition)
-  * reads only PUBLIC, keyless, first-party endpoints (gravatar, github,
-    twitter availability, microsoft userrealm, xposedornot, keys.openpgp,
-    web.archive, python, reddit .json, crt.sh/DNS, bing html, ahmia index,
-    WhatsMyName dataset)
+  * reads only PUBLIC, first-party endpoints (gravatar, github, microsoft
+    userrealm, xposedornot, keys.openpgp, web.archive, reddit .json,
+    crt.sh/DNS, the WhatsMyName dataset, the ahmia index, and search-engine
+    dorks: Google through your own API key, else bing/duckduckgo/mojeek)
   * built for identifiers you own or have the owner's consent to scan -
     scanning third parties stays your responsibility
   * no password-reset probing, no credential checks, no breach dumps,
@@ -52,16 +52,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--html", metavar="PATH", help="write a standalone one-file HTML dossier (renders the graph)")
     parser.add_argument("--dot", metavar="PATH", help="write a Graphviz .dot file")
     parser.add_argument("--fold-plus", action="store_true", help="strip +tag from email local-parts before scanning")
-    parser.add_argument("--depth", type=int, default=3, help="how deep spawned leads are chased (default 3)")
+    parser.add_argument("--depth", type=int, default=4, help="how deep spawned leads are chased (default 4)")
     parser.add_argument("--no-banner", action="store_true", help="skip the animated startup banner + live cockpit")
     parser.add_argument("--verbose", "-v", action="store_true", help="print the full evidence dump after the ranking")
     parser.add_argument("--demo", action="store_true", help="offline synthetic replay (venue-safe; fictional subject + your seeds)")
     parser.add_argument("--url-log", metavar="PATH", help="append every outbound request URL to this file (transparency check)")
     parser.add_argument("--agent", action="store_true",
                         help="agentic mode: LLM-planned tool batches + evidence ledger + markdown dossier "
-                             "(Gemini flash-lite via GEMINI_API_KEY, free tier)")
+                             "(needs an LLM key: run --setup, gemini free tier or claude)")
     parser.add_argument("--model", default=None,
-                        help="agent mode: model id (default gemini-3.5-flash-lite; flash-lite = free tier)")
+                        help="agent mode: model id (default: the --setup provider's model; "
+                             "claude-* uses the anthropic key, anything else the gemini key)")
     parser.add_argument("--agent-budget", type=int, default=120,
                         help="agent mode: max LLM calls (default 120)")
     parser.add_argument("--budget-seconds", type=int, default=900,
@@ -130,18 +131,27 @@ def _run_agent(args: argparse.Namespace, transport=None) -> int:
         except Exception:
             sink = None
 
+    async def go() -> str:
+        # one event loop for the run AND the cleanup: an httpx client must be
+        # closed on the loop that opened it
+        try:
+            return await planner.run(leads, full=args.full)
+        finally:
+            await planner.close()
+            closer = getattr(llm, "aclose", None)
+            if closer is not None:
+                await closer()
+
     start = time.monotonic()
     try:
         if sink is not None:
             with sink:
-                report = asyncio.run(planner.run(leads))
+                report = asyncio.run(go())
         else:
-            report = asyncio.run(planner.run(leads))
+            report = asyncio.run(go())
     except RuntimeError as exc:  # rate limit, key rejected, network
         print(f"thousand-eyes agent: LLM error: {exc}", file=sys.stderr)
         return 3
-    finally:
-        asyncio.run(planner.close())
     wall = time.monotonic() - start
 
     if args.demo:

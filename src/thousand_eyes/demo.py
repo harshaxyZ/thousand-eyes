@@ -163,6 +163,19 @@ def demo_transport() -> httpx.MockTransport:
                 "</li></ol></body></html>"
             )
 
+        # keyless search engines: a clean, empty result page
+        if url.host in ("html.duckduckgo.com", "www.mojeek.com"):
+            return httpx.Response(200, text="<html><body></body></html>")
+
+        if url.host == "leakcheck.io" and url.path == "/api/public":
+            return httpx.Response(200, json={
+                "success": True, "found": 1, "fields": ["username", "password"],
+                "sources": [{"name": "DemoForum.example (synthetic)", "date": "2026-01"}],
+            })
+
+        if url.host == "cavalier.hudsonrock.com":
+            return httpx.Response(200, json={"message": "demo fixture", "stealers": []})
+
         # every unknown route behaves like "nothing here" - ambiguous, dropped
         return httpx.Response(404, text="")
 

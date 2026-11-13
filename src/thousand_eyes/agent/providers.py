@@ -1,7 +1,9 @@
-"""LLM adapters: Anthropic (Claude) first, Google Gemini as fallback.
+"""LLM adapters: Anthropic (Claude) and Google Gemini.
 
-Default model is Claude (sonnet) because this is a Claude Code project;
-if no Anthropic key is found we fall back to Gemini flash-lite (free tier).
+Which one runs is decided by where a key is found, in this order: the
+`--setup` config file (the operator's explicit choice), an Anthropic env
+var, a Gemini key file, a Gemini env var. Claude uses sonnet by default,
+Gemini uses flash-lite (free tier).
 Both adapters speak the same protocol: async stream of (chunk, stats) from
 chat(messages), with ttft_ms / token accounting in stats.
 
@@ -35,11 +37,41 @@ CLAUDE_MODELS = CLAUDE_CANDIDATES
 GEMINI_MODELS = (GEMINI_FLASH_LITE, GEMINI_FLASH, GEMINI_PRO)
 
 
+_ANTHROPIC_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_KEY", "CLAUDE_API_KEY")
+_GEMINI_VARS = ("GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_API_KEY",
+                "GOOGLE_GENERATIVE_API_KEY")
+_GEMINI_FILES = ("~/.gemini/api-key", "~/.gemini/key", "~/.config/gemini/api-key")
+
+
 def _key(*names: str) -> str:
     for var in names:
         if os.getenv(var):
             return os.environ[var]
     return ""
+
+
+def _gemini_file_key() -> str:
+    for path in _GEMINI_FILES:
+        try:
+            with open(os.path.expanduser(path), encoding="utf-8") as fh:
+                val = fh.read().strip()
+            if val:
+                return val
+        except OSError:
+            pass
+    return ""
+
+
+def _key_for(provider: str) -> str:
+    """The key that belongs to THIS provider. A key found for the other
+    provider is never handed over (a gemini key sent to anthropic only
+    produces a confusing 401)."""
+    found, key = discover_key()
+    if found == provider:
+        return key
+    if provider == "anthropic":
+        return _key(*_ANTHROPIC_VARS)
+    return _gemini_file_key() or _key(*_GEMINI_VARS)
 
 
 def discover_key() -> Tuple[str, str]:
@@ -54,38 +86,31 @@ def discover_key() -> Tuple[str, str]:
             return str(data.get("provider") or "gemini"), str(data["key"])
     except (OSError, ValueError):
         pass
-    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_KEY", "CLAUDE_API_KEY"):
-        if os.getenv(var):
-            return "anthropic", os.environ[var]
-    for path in (os.path.expanduser("~/.gemini/api-key"),
-                 os.path.expanduser("~/.gemini/key"),
-                 os.path.expanduser("~/.config/gemini/api-key")):
-        try:
-            val = open(path).read().strip()
-            if val:
-                return "gemini", val
-        except OSError:
-            pass
-    for var in ("GEMINI_API_KEY", "GEMINI_KEY", "GOOGLE_API_KEY",
-                "GOOGLE_GENERATIVE_API_KEY"):
-        if os.getenv(var):
-            return "gemini", os.environ[var]
+    key = _key(*_ANTHROPIC_VARS)
+    if key:
+        return "anthropic", key
+    key = _gemini_file_key() or _key(*_GEMINI_VARS)
+    if key:
+        return "gemini", key
     return "", ""
 
 
 def best_model() -> str:
-    """Model the CLI will use (anthropic wins whenever a key exists)."""
+    """Model the CLI will use: the default model of whichever provider
+    discover_key() settles on."""
     provider, _ = discover_key()
     return ANTHROPIC_MODEL if provider == "anthropic" else GEMINI_FLASH_LITE
 
 
 def client_for(model: Optional[str] = None) -> _BaseLLM:
-    """Build the right client. Claude preferred, Gemini as fallback."""
-    provider, key = discover_key()
+    """Build the right client. An explicit `model` picks its own provider
+    (claude-* -> Anthropic, anything else -> Gemini) and gets that
+    provider's key; without one, the discovered key decides."""
     if model:
-        if model.startswith("claude") or model.startswith("gpt"):
-            return ClaudeClient(key or os.getenv("ANTHROPIC_API_KEY", ""), model)
-        return GeminiClient(key or os.getenv("GEMINI_API_KEY", ""), model)
+        if model.startswith("claude"):
+            return ClaudeClient(_key_for("anthropic"), model)
+        return GeminiClient(_key_for("gemini"), model)
+    provider, key = discover_key()
     if provider == "anthropic":
         return ClaudeClient(key, ANTHROPIC_MODEL)
     if provider == "gemini":
@@ -269,5 +294,5 @@ class GeminiClient(_BaseLLM):
                     stats["total_tokens"] = usage.get("totalTokenCount", 0)
 
 
-# backwards-compatible name: the default provider client is Claude
+# backwards-compatible alias
 LLMClient = ClaudeClient

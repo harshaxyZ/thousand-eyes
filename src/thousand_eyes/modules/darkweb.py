@@ -6,17 +6,20 @@ module needs no Tor daemon, no proxy chain, and never opens an .onion
 connection. We only learn: which hidden services the subject's identifier
 is ALREADY INDEXED NEXT TO. An existence/intel fact, not access.
 
-Anti-scrape note (verified live 2026-11-04): the plain ?q= query returns a
-~4.7 KB EMPTY LANDING PAGE; only a query carrying the hidden form token
-(16d742=18c116, see the form markup) returns real results. We read the
-token from the module constant - if Ahmia ever rotates it, the zero-signal
-landing page is detected and reported as INCONCLUSIVE (error), never as a
-fabricated "no mentions". Chrome furniture (the footer "Contact" onion,
+Anti-scrape note (verified live 2026-11-04, re-verified 2026-11-13): the
+plain ?q= query returns a ~4.7 KB EMPTY LANDING PAGE; only a query carrying
+the hidden form token (a hex name=value pair in the search form markup)
+returns real results. Ahmia ROTATES that token, so it is read from the
+landing page's own form before searching (one extra GET, cached for a few
+minutes); the module constant is only the fallback. If the token cannot be
+read, the zero-signal landing page is detected and reported as
+INCONCLUSIVE, never as a fabricated "no mentions". Chrome furniture (the footer "Contact" onion,
 the MITM-warning CSS) must never become a "finding": we only accept
 onions that appear INSIDE <li class="result"> blocks of the results list.
 
 Evidence law:
-  - one GET per seed term (email / username), capped per scan;
+  - one search GET per seed term (email / username / domain), capped
+    per scan, plus one cached GET of the public search form;
   - an .onion host inside a result block is a LEAF (never a pivot -
     nothing is fetched, ever);
   - no-result page → zero leaves AND zero "clean" claims beyond a leaf
@@ -26,6 +29,7 @@ Evidence law:
 from __future__ import annotations
 
 import re
+import time
 from urllib.parse import quote
 
 import httpx
@@ -34,8 +38,12 @@ from thousand_eyes.http_client import describe_http_error
 
 MODULE = "darkweb"
 
-SEARCH_URL = "https://ahmia.fi/search/?q={term}&16d742={token}"
-SEARCH_TOKEN = "18c116"   # hidden form token; rotate ONLY after live verification
+HOME_URL = "https://ahmia.fi/"
+SEARCH_URL = "https://ahmia.fi/search/?q={term}&{name}={token}"
+# fallback hidden form token, used only when the live form cannot be read
+SEARCH_TOKEN_NAME = "16d742"
+SEARCH_TOKEN = "18c116"
+TOKEN_TTL_SECONDS = 600.0
 MAX_LEAVES = 10           # cap on listed results per search (relevance order)
 
 _ONION_RE = re.compile(r"(?:https?://)?([a-z2-7]{16,56}(?:\.[a-z2-7]{16,56})?)\.onion")
@@ -45,6 +53,38 @@ _RESULT_SPLIT_RE = re.compile(r'<li class="result">')
 _TITLE_RE = re.compile(r"<h4>\s*<a[^>]*>(.*?)</a>", re.S | re.I)
 _DESC_RE = re.compile(r"</h4>\s*<p>(.*?)</p>", re.S)
 _LASTSEEN_RE = re.compile(r'data-timestamp="([^"]+)"')
+
+
+_FORM_TOKEN_RE = re.compile(
+    r'<input[^>]*type="hidden"[^>]*name="([0-9a-f]{4,16})"[^>]*value="([0-9a-f]{4,16})"', re.I)
+
+# (name, value, fetched-at) of the last token read from the live form
+_token_cache: tuple[str, str, float] | None = None
+
+
+def parse_form_token(html: str) -> tuple[str, str] | None:
+    """The hidden (name, value) pair of Ahmia's search form, or None."""
+    m = _FORM_TOKEN_RE.search(html or "")
+    return (m.group(1), m.group(2)) if m else None
+
+
+async def form_token(client: httpx.AsyncClient) -> tuple[str, str]:
+    """Current form token: read from the public landing page, cached briefly.
+    Any failure falls back to the module constant (and the landing-page
+    detector then reports the search as inconclusive)."""
+    global _token_cache
+    now = time.monotonic()
+    if _token_cache and now - _token_cache[2] < TOKEN_TTL_SECONDS:
+        return _token_cache[0], _token_cache[1]
+    try:
+        resp = await client.get(HOME_URL)
+    except httpx.HTTPError:
+        return SEARCH_TOKEN_NAME, SEARCH_TOKEN
+    found = parse_form_token(resp.text) if resp.status_code == 200 else None
+    if not found:
+        return SEARCH_TOKEN_NAME, SEARCH_TOKEN
+    _token_cache = (found[0], found[1], now)
+    return found
 
 
 def parse_results(html: str) -> list[dict]:
@@ -95,7 +135,8 @@ async def run(client: httpx.AsyncClient, term: str, *, sink=None) -> dict:
     if sink:
         sink.stage(f"darknet index: {term}")
         sink.expect(1)
-    url = SEARCH_URL.format(term=quote(term, safe=""), token=SEARCH_TOKEN)
+    name, token = await form_token(client)
+    url = SEARCH_URL.format(term=quote(term, safe=""), name=name, token=token)
     try:
         resp = await client.get(url)
     except httpx.HTTPError as exc:

@@ -1,36 +1,31 @@
-﻿"""The wildfire engine (v0.3).
+"""The wildfire engine.
 
-Old model: a fixed 8-step pipeline for exactly one seed, depth max 2.
-New model: a lead-driven breadth-first walk â€” every CONFIRMED finding of
-module M becomes a new typed LEAD, leads keep spawning leads, and the run
-ends with a complete footprint graph. Evidence-only rules are unchanged:
+A lead-driven breadth-first walk: every CONFIRMED finding of a module becomes
+a new typed LEAD, leads keep spawning leads, and the run ends with a complete
+footprint graph. Evidence-only rules:
 
   - a node exists only because a specific request returned that specific
     identifier (URL, email, phone, handle, name, domain);
   - every edge carries source + evidence URL + exact snippet;
   - a blocked/ambiguous response is inconclusive, never "not found";
   - usernames are never INVENTED: they are either leads the operator
-    typed (user-asserted), handles a real API returned (Breach payload,
-    GitHub object), or â€” with the explicit opt-in --wild flag â€”
-    deterministic punctuation permutations of the operator's own email
-    local-part expressed back to the operator-as-subject.
+    typed (user-asserted), handles a real API returned (breach payload,
+    GitHub object), handles proven by a response-confirmed profile URL, or,
+    with the explicit opt-in --full flag, deterministic punctuation
+    permutations of the operator's own email local-part.
 
-Lead types and the modules that consume them:
-  email    -> gravatar, hibp, github-commit-search, email-checks,
-              userrealm, breach-existence, pgp, registration-leaves,
-              dns (domain posture), exact-document (web spike)
-  phone    -> exact-document
-  username -> username-sweep (WMN dataset), github-profile, keybase-proofs,
-              reddit-user
-  url      -> fetch (+interconnect when the URL is exactly a github.com
-              profile root), wayback
-  domain   -> domains (DoH MX + crt.sh + RDAP; infra side-list only)
-  name     -> node-only (never expanded â€” no guessing modules exist)
+Which modules answer which lead type is declared once, in registry.py
+(email, phone, username, url, domain). A `name` is a node only: it is never
+expanded, because no guessing modules exist.
 
 Depth: the seed is depth 0, a module output spawned from a depth-d lead is
-depth d+1; leads are processed only while depth <= max_depth (default 3).
+depth d+1; leads are processed only while depth <= max_depth (default 4).
 Caps per type provide the runtime/politeness ceiling on how far one lead
 can ignite the graph (seeds always run; caps count only spawned leads).
+
+Within one lead the modules run concurrently (each talks to a different
+first-party host), but their results are folded into the graph in registry
+order, so a run stays reproducible.
 """
 
 from __future__ import annotations
@@ -46,33 +41,8 @@ from thousand_eyes import registry
 from thousand_eyes.handle_rules import extract_handle
 from thousand_eyes.http_client import new_client
 from thousand_eyes.impact import AMBIENT as _AMBIENT_TIER, leaf_tier, pivot_tier
-from thousand_eyes.models import NULL_SINK, Leaf, ModuleError, Node, ScanResult, Skipped, normalise_value
-from thousand_eyes.modules import (
-    breach_existence,
-    bluesky_profile,
-    chess_profile,
-    darkweb,
-    dockerhub_profile,
-    domains,
-    email_checks,
-    exact_document,
-    fetch,
-    github_commit_search,
-    github_profile,
-    gitlab_profile,
-    gravatar,
-    hackernews_user,
-    hibp,
-    keybase_proofs,
-    mastodon_lookup,
-    pgp,
-    registration_leaves,
-    security_headers,
-    username_checks,
-    userrealm,
-    wayback,
-    reddit_user,
-)
+from thousand_eyes.models import NULL_SINK, ModuleError, Node, ScanResult, normalise_value
+from thousand_eyes.modules import domains, github_profile, keybase_proofs
 from thousand_eyes.normalise import normalise_seed
 import re as _re
 
@@ -100,21 +70,23 @@ _WILD_SPAWN_CAPS = {
     "domain": 24,
 }
 
-# expected engine cost (progress bar units) per enqueued lead type
+# expected engine cost (progress bar units) per enqueued lead type: a rough
+# planning number for the bar, the sweeps add their own per-site units
 _LEAD_UNIT_COST = {
-    "email": 10,   # gravatar, hibp, gcs, email-checks, userrealm, breach(+rock), pgp, reg-leaves, darkweb, exact-doc
-    "username": 6, # wm-sweep, github, keybase, reddit, darkweb (+1 var)
-    "url": 3,      # fetch, wayback (+github/keybase pair on profile roots)
-    "phone": 1,    # exact-document
-    "domain": 1,   # posture run
+    "email": 10,
+    "username": 6,
+    "url": 3,
+    "phone": 1,
+    "domain": 1,
 }
 
-# modules that tick the progress bar internally (per-site), so the engine
-# does not add one more unit-bump for them
-_SELF_TALLYING_MODULES = {"username-sweep", "email-checks", "registration-leaves", "darkweb"}
+# how many modules of ONE lead run at the same time. Each module talks to a
+# different first-party host, so this is a load ceiling for the operator's
+# machine, not extra pressure on any single site.
+MODULE_CONCURRENCY = 6
 
 
-# archived snapshots are terminal evidence â€” never re-queued leads
+# archived snapshots are terminal evidence - never re-queued leads
 _ARCHIVED_URL_PREFIX = "https://web.archive.org/web/"
 
 
@@ -150,18 +122,22 @@ def _wild_candidates(local: str) -> list[str]:
     return out[:6]
 
 
-def _darkweb_with_note(engine: "_Engine", term: str) -> dict:
-    """darkweb.run wrapper that converts the module's inconclusive 'note'
-    (anti-scrape landing page) into a skipped-row instead of an error -
-    the honest middle between 'no mentions' and 'blocked'."""
-    return _run_darkweb(engine, term)
+def module_outcome(res: dict) -> str:
+    """ok | partial | failed | skipped for one module result.
 
-
-async def _run_darkweb(engine: "_Engine", term: str) -> dict:
-    res = await darkweb.run(engine.client, term, sink=engine.sink)
-    if res.get("note"):
-        engine.result.append_skipped("darkweb", str(res["note"]))
-    return res
+    A sweep that answered for 119 sites and timed out on 1 is PARTIAL, not
+    failed: counting it as failed made the coverage line read far worse than
+    the run really was. Every sub-error is still listed under "checks that
+    failed" - partial only changes how the module itself is counted.
+    """
+    if res.get("error"):
+        return "failed"
+    if res.get("errors"):
+        answered = res.get("pivots") or res.get("leaves") or res.get("checked")
+        return "partial" if answered else "failed"
+    if res.get("skipped"):
+        return "skipped"
+    return "ok"
 
 
 def _record(result: ScanResult, module_label: str, res: dict) -> None:
@@ -169,13 +145,10 @@ def _record(result: ScanResult, module_label: str, res: dict) -> None:
     module result shapes and flattens them into the ScanResult."""
     # quality accounting: how many source families actually answered
     sources = result.meta.setdefault("sources", {})
-    bucket = sources.setdefault(module_label, {"ok": 0, "failed": 0, "skipped": 0})
-    if res.get("error") or res.get("errors"):
-        bucket["failed"] += 1
-    elif res.get("skipped"):
-        bucket["skipped"] += 1
-    else:
-        bucket["ok"] += 1
+    bucket = sources.setdefault(
+        module_label, {"ok": 0, "partial": 0, "failed": 0, "skipped": 0})
+    outcome = module_outcome(res)
+    bucket[outcome] = bucket.get(outcome, 0) + 1
     if res.get("error"):
         result.errors.append(ModuleError(module_label, res["error"]))
     for err in res.get("errors") or []:
@@ -243,6 +216,7 @@ class _Engine:
         # reach the same handle through different paths; the module must not
         # run twice on the same value.
         self._module_runs: set[tuple[str, str]] = set()
+        self._module_sem = asyncio.Semaphore(MODULE_CONCURRENCY)
 
     # ---------------- live event plumbing ----------------
     def emit(self, event: str, **data) -> None:
@@ -265,20 +239,30 @@ class _Engine:
         self.findings += 1
         self.emit("found", tier=tier, kind=kind, value=label)
 
-    def _record_module(self, label: str, res: dict, lead: Lead | None = None,
-                       ms: float = 0.0) -> None:
-        """Record one module result and announce it live."""
-        _record(self.result, label, res)
-        self.modules_run += 1
-        failed = bool(res.get("error") or res.get("errors"))
-        if failed:
-            self.modules_failed += 1
+    def _announce_module(self, label: str, res: dict, lead: Lead | None = None,
+                         ms: float = 0.0) -> None:
+        """Tell the live feed one module finished (called the moment it does)."""
+        outcome = module_outcome(res)
+        state = {"failed": "fail", "partial": "partial"}.get(outcome, "ok")
         n = len(res.get("pivots") or []) + len(res.get("leaves") or [])
-        self.emit("module", label=label, state="fail" if failed else "ok",
+        error = str(res.get("error") or "")
+        if not error and outcome == "partial":
+            error = f"{len(res.get('errors') or [])} sub-check(s) did not answer"
+        self.emit("module", label=label, state=state,
                   findings=n, ms=round(ms * 1000),
                   lead=lead.value if lead else "",
                   lead_type=lead.type if lead else "",
-                  error=str(res.get("error") or "")[:160])
+                  error=error[:160])
+
+    def _record_module(self, label: str, res: dict, lead: Lead | None = None,
+                       ms: float = 0.0, announce: bool = True) -> None:
+        """Fold one module result into the report counters."""
+        _record(self.result, label, res)
+        self.modules_run += 1
+        if module_outcome(res) == "failed":
+            self.modules_failed += 1
+        if announce:
+            self._announce_module(label, res, lead, ms)
 
     def enqueue(self, lead_type: str, value: str, from_value: str, source: str, is_seed: bool = False, depth: int = 1) -> None:
         if not value:
@@ -384,11 +368,10 @@ class _Engine:
         specs = registry.modules_for(lead.type)
         ctx = registry.Ctx(sink=self.sink,
                            all_sites=(self.all_sites and lead.depth == 0))
+        runnable = []
         for spec in specs:
             if spec.max_depth is not None and lead.depth > spec.max_depth:
                 continue
-            if self._stop_reason(leads=False):
-                return
             run_key = (spec.label, lead.value)
             if run_key in self._module_runs:
                 # the cascade can reach the same handle through different
@@ -398,19 +381,39 @@ class _Engine:
                           error="already ran on this value")
                 continue
             self._module_runs.add(run_key)
-            self._stage(f"{lead.type}[{lead.value[:60]}] \u2192 {spec.label}")
-            t0 = time.monotonic()
-            try:
-                res = await spec.fn(self.client, lead.value, ctx)
-            except httpx.HTTPError as exc:
-                res = {"pivots": [], "leaves": [],
-                       "error": f"engine: {type(exc).__name__}: {exc}"}
-            except Exception as exc:      # a broken module must not kill the run
-                res = {"pivots": [], "leaves": [],
-                       "error": f"engine: {type(exc).__name__}: {exc}"}
-            if not spec.self_tallying:
-                self.sink.bump()
-            self._record_module(spec.label, res, lead, ms=time.monotonic() - t0)
+            runnable.append(spec)
+
+        async def one(spec):
+            """Run one module. None = the budget ended before it started."""
+            async with self._module_sem:
+                if self._stop_reason(leads=False):
+                    return None
+                self._stage(f"{lead.type}[{lead.value[:60]}] \u2192 {spec.label}")
+                t0 = time.monotonic()
+                try:
+                    res = await spec.fn(self.client, lead.value, ctx)
+                except Exception as exc:      # a broken module must not kill the run
+                    res = {"pivots": [], "leaves": [],
+                           "error": f"engine: {type(exc).__name__}: {exc}"}
+                ms = time.monotonic() - t0
+                if not spec.self_tallying:
+                    self.sink.bump()
+                self._announce_module(spec.label, res, lead, ms)
+                return res, ms
+
+        outcomes = await asyncio.gather(*(one(spec) for spec in runnable))
+
+        # fold the results into the graph in REGISTRY order, not completion
+        # order: spawn caps and node order must not depend on network timing
+        cut_short = False
+        for spec, outcome in zip(runnable, outcomes):
+            if outcome is None:
+                # never ran: leave it runnable if the value comes round again
+                self._module_runs.discard((spec.label, lead.value))
+                cut_short = True
+                continue
+            res, ms = outcome
+            self._record_module(spec.label, res, lead, ms=ms, announce=False)
             self.take(lead, res.get("pivots") or [])
             for leaf in res.get("leaves") or []:
                 cat = leaf.get("category", "")
@@ -419,6 +422,8 @@ class _Engine:
                 if added:
                     tier, _ = leaf_tier(leaf["site"], cat)
                     self._finding(tier, cat or "leaf", leaf["site"])
+        if cut_short:
+            return
 
         # interconnect rule: a github PROFILE ROOT also carries keybase proofs
         if lead.type == "url":
@@ -430,17 +435,17 @@ class _Engine:
                     t0 = time.monotonic()
                     try:
                         res = await fn(self.client, gh)
-                    except httpx.HTTPError as exc:
+                    except Exception as exc:      # a broken module must not kill the run
                         res = {"pivots": [], "error": f"engine: {type(exc).__name__}: {exc}"}
                     self.sink.bump()
                     self._record_module(label, res, lead, ms=time.monotonic() - t0)
                     self._module_runs.add((label, gh))
                     self.take(lead, res.get("pivots") or [])
 
-        # --wild: deterministic handle permutations of the operator's own email
+        # --full: deterministic handle permutations of the operator's own email
         if self.wild and lead.type == "email":
             local = lead.value.rsplit("@", 1)[0]
-            self._stage("derived handles from local-part (--wild)")
+            self._stage("derived handles from local-part (--full)")
             for cand in _wild_candidates(local):
                 self.enqueue("username", cand, lead.value,
                              "wild:localpart-permutation", depth=lead.depth + 1)
@@ -462,15 +467,8 @@ class _Engine:
             lead = self.queue.popleft()
             if lead.depth > self.max_depth:
                 continue
-            handler = {
-                "email": self._run_lead,
-                "phone": self._run_lead,
-                "username": self._run_lead,
-                "url": self._run_lead,
-                "domain": self._run_lead,
-            }.get(lead.type)
-            if handler is None:
-                continue
+            if not registry.modules_for(lead.type):
+                continue      # e.g. a name: a node, never an expandable lead
             stage_no += 1
             self.leads_processed += 1
             stage = {
@@ -492,7 +490,7 @@ class _Engine:
             self.emit("stage_start", n=stage_no, type=lead.type, value=lead.value,
                       depth=lead.depth)
             try:
-                await handler(lead)
+                await self._run_lead(lead)
             except httpx.HTTPError as exc:
                 # per-module HTTPError layers are caught inside each module itself;
                 # a raw exception slipping out here is recorded, never fatal
@@ -530,8 +528,7 @@ async def run_scan(
     is hit the run stops cleanly and says so in the report.
     Accepts one seed (str) or multiple seeds (list) - every one becomes a
     first-class root lead of the graph."""
-    import time as _time
-    started = _time.perf_counter()
+    started = time.perf_counter()
     if isinstance(raw_seeds, str):
         raw_seeds = [raw_seeds]
 
@@ -564,7 +561,7 @@ async def run_scan(
             engine.sink.expect(_LEAD_UNIT_COST.get(lead_type, 1))
         await engine.run(seeds)
 
-    result.meta["duration_seconds"] = round(_time.perf_counter() - started, 2)
+    result.meta["duration_seconds"] = round(time.perf_counter() - started, 2)
     result.meta["wild"] = bool(wild)
     result.meta["all_sites"] = bool(all_sites)
     return result

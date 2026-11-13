@@ -919,7 +919,8 @@ class ThousandEyesApp(App):
                               f"{data.get('type')} → {data.get('value')}")
         elif kind == "module":
             state = data.get("state")
-            mark = "[#ff6b6b]fail[/]" if state == "fail" else "[#5bd6a0]ok[/]"
+            mark = {"fail": "[#ff6b6b]fail[/]",
+                    "partial": "[#f5c542]partial[/]"}.get(state, "[#5bd6a0]ok[/]")
             if state != "skip":
                 self._scan_stats["modules"] = self._scan_stats.get("modules", 0) + 1
             n = data.get("findings", 0)
