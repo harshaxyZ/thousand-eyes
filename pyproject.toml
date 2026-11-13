@@ -38,6 +38,7 @@ Issues = "https://github.com/harshaxyZ/thousand-eyes/issues"
 
 [project.optional-dependencies]
 banner = ["numpy>=1.26,<3"]   # animated startup banner only; scans never touch it
+tor = ["socksio>=1.0,<2"]     # --tor only: SOCKS support for the dark-web index over Tor
 dev = [
     "pytest>=8.4,<10",
     "pytest-asyncio>=1.4,<2",

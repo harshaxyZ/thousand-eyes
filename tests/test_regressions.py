@@ -296,7 +296,7 @@ def test_web_mentions_rank_as_ambient():
 async def test_darkweb_reads_the_rotating_form_token(monkeypatch):
     from thousand_eyes.modules import darkweb
 
-    monkeypatch.setattr(darkweb, "_token_cache", None)
+    monkeypatch.setattr(darkweb, "_token_cache", {})
     seen: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -312,7 +312,7 @@ async def test_darkweb_reads_the_rotating_form_token(monkeypatch):
 
     assert res["errors"] == []
     assert seen[-1] == "https://ahmia.fi/search/?q=fixturehandle&ab12cd=34ef56"
-    monkeypatch.setattr(darkweb, "_token_cache", None)
+    monkeypatch.setattr(darkweb, "_token_cache", {})
 
 
 # ---------------------------------------------------------- breach sources
@@ -379,3 +379,88 @@ def test_agent_ledger_keeps_every_leaf():
     planner = Planner(_SilentLLM(), goal="t")
     assert planner._ledger_add("engine.leakcheck", rows) == 2
     assert {r["value"] for r in planner.ledger} == {"breach: A", "breach: B"}
+
+
+# ---------------------------------------------------------------- tor / onion
+
+async def test_tor_onion_pass_is_additive_and_degrades():
+    """--tor adds an onion index pass. The clearnet answer must survive even
+    when Tor is missing or offline; the onion failure is a recorded error."""
+    from thousand_eyes.modules import darkweb
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/":
+            return httpx.Response(200, text=(
+                '<form><input type="hidden" name="aa11bb" value="cc22dd"></form>'))
+        return httpx.Response(200, text=(
+            '<ol class="searchResults"><li class="result"><h4><a>leak thread</a></h4>'
+            '<cite>abcdefghij234567.onion</cite></li></ol>'))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        res = await darkweb.run(client, "fixturehandle",
+                                tor_proxy="socks5://127.0.0.1:1")
+
+    assert res["checked"] == 2
+    assert any("abcdefghij234567.onion" in leaf["site"] for leaf in res["leaves"])
+    # the onion pass failed (no socks extra, or connection refused) but the
+    # run did not crash and the failure is visible, never a clean result
+    assert any("tor" in e or "socks" in e.lower() for e in res["errors"])
+
+
+async def test_tor_onion_hits_are_labelled_and_deduped(monkeypatch):
+    """With Tor reachable (faked), onion-only hits are added and tagged;
+    a host already seen on the clearnet pass is not listed twice."""
+    from thousand_eyes.modules import darkweb
+
+    async def fake_onion(term, tor_proxy):
+        return {"leaves": [
+            darkweb._leaf({"onion": "abcdefghij234567.onion", "title": "dup",
+                           "description": "", "last_seen": ""},
+                          "http://x.onion/search", 200, "tor"),
+            darkweb._leaf({"onion": "zzzzzzzzzz234567.onion", "title": "onion only",
+                           "description": "", "last_seen": ""},
+                          "http://x.onion/search", 200, "tor")],
+            "errors": []}
+
+    monkeypatch.setattr(darkweb, "_search_onion", fake_onion)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/":
+            return httpx.Response(200, text='<input type="hidden" name="aa11bb" value="cc22dd">')
+        return httpx.Response(200, text=(
+            '<ol class="searchResults"><li class="result"><h4><a>t</a></h4>'
+            '<cite>abcdefghij234567.onion</cite></li></ol>'))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        res = await darkweb.run(client, "fixturehandle", tor_proxy="socks5://x:9050")
+
+    sites = [leaf["site"] for leaf in res["leaves"]]
+    assert sum("abcdefghij234567.onion" in s for s in sites) == 1   # deduped
+    assert any("zzzzzzzzzz234567.onion" in s and "[tor]" in s for s in sites)
+
+
+def test_cli_exposes_tor_flags():
+    from thousand_eyes.cli import DEFAULT_TOR_PROXY, build_parser
+
+    args = build_parser().parse_args(["x@example.org", "--tor"])
+    assert args.tor is True
+    assert args.tor_proxy == DEFAULT_TOR_PROXY
+    assert build_parser().parse_args(["x@example.org"]).tor is False
+
+
+async def test_darkweb_does_not_query_onion_without_tor():
+    """Default run: no Tor, so only the clearnet host is contacted."""
+    from thousand_eyes.modules import darkweb
+
+    hosts: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        return httpx.Response(200, text='<ol class="searchResults"></ol>')
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        res = await darkweb.run(client, "fixturehandle")
+
+    assert res["checked"] == 1
+    assert all(h == "ahmia.fi" for h in hosts)
+    assert not any(".onion" in h for h in hosts)

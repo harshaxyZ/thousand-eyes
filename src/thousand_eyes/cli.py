@@ -24,6 +24,8 @@ import sys
 from thousand_eyes import __version__
 from thousand_eyes.normalise import InvalidSeed, normalise_seed
 
+DEFAULT_TOR_PROXY = "socks5://127.0.0.1:9050"
+
 DISCLAIMER = """\
 thousand-eyes v{v} - public-data self-audit (wildfire edition)
   * reads only PUBLIC, first-party endpoints (gravatar, github, microsoft
@@ -71,6 +73,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-leads", type=int, default=0,
                         help="hard cap on total leads processed (0 = unlimited, "
                              "the time budget is the real governor)")
+    parser.add_argument("--tor", action="store_true",
+                        help="also query the dark-web index over Tor (needs a running "
+                             "Tor SOCKS proxy; mention checks only, never fetches .onion content)")
+    parser.add_argument("--tor-proxy", metavar="URL", default=DEFAULT_TOR_PROXY,
+                        help=f"Tor SOCKS proxy for --tor (default {DEFAULT_TOR_PROXY})")
     parser.add_argument("--setup", action="store_true",
                         help="guided onboarding: pick a provider and store "
                              "your LLM key (gemini free tier or anthropic)")
@@ -289,6 +296,7 @@ def main(argv: list[str] | None = None) -> int:
                     sink=sink,
                     time_budget=float(args.budget_seconds),
                     max_leads=args.max_leads or None,
+                    tor_proxy=args.tor_proxy if args.tor else "",
                 ))
         else:
             result_obj = asyncio.run(run_scan(
@@ -301,6 +309,7 @@ def main(argv: list[str] | None = None) -> int:
                 url_log=args.url_log,
                 time_budget=float(args.budget_seconds),
                 max_leads=args.max_leads or None,
+                tor_proxy=args.tor_proxy if args.tor else "",
             ))
     except Exception as exc:  # never show a bare traceback to a user mid-demo
         print(f"scan failed: {type(exc).__name__}: {exc}", file=sys.stderr)

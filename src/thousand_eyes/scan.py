@@ -192,12 +192,14 @@ class _Engine:
         time_budget: float | None = None,
         max_leads: int | None = None,
         abort=None,
+        tor_proxy: str = "",
     ) -> None:
         self.result = result
         self.client = client
         self.max_depth = max_depth
         self.wild = wild
         self.all_sites = all_sites
+        self.tor_proxy = tor_proxy
         self.sink = sink if sink is not None else NULL_SINK
         self.caps = dict(_WILD_SPAWN_CAPS if wild else _DEFAULT_SPAWN_CAPS)
         self.queue: deque[Lead] = deque()
@@ -367,7 +369,8 @@ class _Engine:
         """
         specs = registry.modules_for(lead.type)
         ctx = registry.Ctx(sink=self.sink,
-                           all_sites=(self.all_sites and lead.depth == 0))
+                           all_sites=(self.all_sites and lead.depth == 0),
+                           tor_proxy=self.tor_proxy)
         runnable = []
         for spec in specs:
             if spec.max_depth is not None and lead.depth > spec.max_depth:
@@ -518,6 +521,7 @@ async def run_scan(
     time_budget: float | None = None,
     max_leads: int | None = None,
     abort=None,
+    tor_proxy: str = "",
 ) -> ScanResult:
     """Wildfire scan. `transport` is test-only: pass an httpx.MockTransport to
     run the full pipeline against a fixture server instead of the live network.
@@ -556,6 +560,7 @@ async def run_scan(
             time_budget=time_budget,
             max_leads=max_leads,
             abort=abort,
+            tor_proxy=tor_proxy,
         )
         for lead_type, value in seeds:
             engine.sink.expect(_LEAD_UNIT_COST.get(lead_type, 1))
@@ -564,5 +569,6 @@ async def run_scan(
     result.meta["duration_seconds"] = round(time.perf_counter() - started, 2)
     result.meta["wild"] = bool(wild)
     result.meta["all_sites"] = bool(all_sites)
+    result.meta["tor"] = bool(tor_proxy)
     return result
 

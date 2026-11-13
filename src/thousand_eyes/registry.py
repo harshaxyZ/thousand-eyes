@@ -68,6 +68,7 @@ class Ctx:
     sink: Any = None
     all_sites: bool = False
     budget: float = 0.0
+    tor_proxy: str = ""     # --tor: query the dark-web index over Tor too
 
 
 ModuleFn = Callable[[httpx.AsyncClient, str, Ctx], Awaitable[dict]]
@@ -137,7 +138,7 @@ async def _domain_posture(client: httpx.AsyncClient, domain: str, ctx: Ctx) -> d
 
 
 async def _darkweb_note(client: httpx.AsyncClient, term: str, ctx: Ctx) -> dict:
-    res = await darkweb.run(client, term, sink=ctx.sink)
+    res = await darkweb.run(client, term, sink=ctx.sink, tor_proxy=ctx.tor_proxy)
     if res.get("note"):
         res = dict(res)
         res["skipped"] = str(res["note"])
