@@ -16,3 +16,4 @@ dist/
 # session scratch
 .session_extract/
 *.bundle
+*.log

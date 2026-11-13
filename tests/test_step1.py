@@ -1,10 +1,12 @@
 """Step-1 email-only harvest: exact output shape, bot filter, no expansion."""
 import asyncio
 
+import pytest
+
 from thousand_eyes.step1 import LeadRow, render_step1
 
 EMAIL = "jane.doe@example.com"
-URL_LOG = r"step1_email_only.log"
+URL_LOG = "step1_email_only.log"
 
 
 def test_render_shape_exact():
@@ -30,6 +32,7 @@ def test_render_shape_exact():
     assert "darkweb" not in out
 
 
+@pytest.mark.skip(reason="live run: needs a real email with a public GitHub commit trail")
 def test_live_step1_run_matches_proof_law():
     """Live run: 9 outbound URLs, no hub expansion, all rows have proof."""
     from thousand_eyes.step1 import collect_email_leads
