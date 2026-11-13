@@ -54,7 +54,9 @@ That is how one email turns into a map of a person's accounts.
   reuse*, not one person. Accounts are tagged `[confirmed]` or
   `[handle-reuse - same person unconfirmed]`.
 * **Never fake a negative.** A blocked or timed-out source is INCONCLUSIVE
-  and is listed under "checks that failed" with its real reason.
+  and is listed under "checks that failed" with its real reason. The `--tor`
+  onion pass follows the same rule: if Tor is missing or offline it is a
+  visible failed check, never a silent "nothing found".
 
 ## The API bridge
 

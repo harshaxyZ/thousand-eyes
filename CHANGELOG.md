@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Optional Tor pass for the dark-web index** (`--tor`, `--tor-proxy`):
+  the same Ahmia search also runs over Tor against Ahmia's onion mirror, so
+  the lookup survives the clearnet host being blocked. It stays a mention
+  check (an indexed onion is cited, never contacted; no dump is fetched).
+  The clearnet pass always runs first, so a missing or offline Tor only
+  shows up as a failed check, never hiding the clearnet result. SOCKS is an
+  optional extra (`pipx inject thousand-eyes socksio`). Domains are searched
+  on the index too, not only emails and usernames.
 - **Search dorking as a registry source** (`modules/dorks.py`): every seed
   is expanded into exact-phrase dorks (paste sites, exposed documents,
   code hosts, leak chatter, `site:` and exposed-file sets for a domain).

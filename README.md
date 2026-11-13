@@ -62,7 +62,9 @@ counts ✔ source coverage ✔ stage table ✔ skipped/inconclusive (never faked
   optional deps, LLM key, IDE skill, and a live reachability probe of five
   keyless endpoints.
 - **Fenced by code, not by prompt.** No password-reset flows, no credential
-  probing, no broker APIs, no breach-dump pulls, no `.onion` resolution. The
+  probing, no broker APIs, no breach-dump pulls. By default no `.onion`
+  resolution at all; `--tor` opts into one narrow case (the Ahmia onion
+  search index, mentions only - see below), never dump contents. The
   LLM planner cannot bypass any of it: it only *selects* tools; the
   deterministic SafeClient executes them, and its fence is a hook on the
   HTTP client itself, so every request of every tool (redirect hops
@@ -96,6 +98,7 @@ Prefer to drive it yourself?
 ```bash
 pipx install "git+https://github.com/harshaxyZ/thousand-eyes.git"
 pipx inject thousand-eyes numpy          # banner only; the audit does not need it
+pipx inject thousand-eyes socksio        # --tor only; the default run does not need it
 ```
 
 It installs from this git repository. There is no PyPI or npm package.
@@ -152,6 +155,7 @@ thousand-eyes --demo --agent you@example.com  # agent mode, offline synthetic re
 thousand-eyes you@example.com --budget-seconds 1800   # deeper cascade (quality first)
 thousand-eyes you@example.com --max-leads 300         # hard ceiling on nodes visited
 thousand-eyes you@example.com --depth 2               # fewer hops from the seed (default 4)
+thousand-eyes you@example.com --tor                  # also search the dark-web index over Tor
 ```
 
 - Default mode never invents usernames. `--full` opts into wildfire: bigger
@@ -227,12 +231,13 @@ and addresses on the domain.
 
 ### Dark web and breach exposure
 
-All of it is read over the clear web, from indexes that publish what they
-already hold. Nothing here opens a `.onion` connection or downloads a dump.
+All of it is read from indexes that publish what they already hold. By
+default nothing opens a `.onion` connection and nothing downloads a dump.
 
 | source | what it says | key |
 |--------|--------------|-----|
-| Ahmia index | which Tor hidden services are indexed next to the identifier | none |
+| Ahmia index (clearnet) | which Tor hidden services are indexed next to the identifier | none |
+| Ahmia index (`--tor`) | the same index over Tor, when the clearnet host is blocked | needs Tor + `socksio` |
 | Hudson Rock | whether an infostealer-infected machine held logins for the email, and when | none |
 | LeakCheck public | which breaches list the email and which field types leaked | none |
 | XposedOrNot | breach names for the email | none |
@@ -329,4 +334,10 @@ WebBreacher and the OSINT community, CC-BY-SA 4.0; snapshot taken
 
 Darknet mentions come from Ahmia's public clearnet index (one search GET
 per term plus a cached read of its search form; onions listed there are
-cited, never contacted).
+cited, never contacted). With `--tor` the same search also runs against
+Ahmia's onion mirror through a Tor SOCKS proxy (`--tor-proxy`, default
+`socks5://127.0.0.1:9050`); it is still a mention check - the tool queries
+that one search index and never fetches a hidden service's content or a
+dump. It needs a running Tor and the `socksio` extra; without either, the
+onion pass is skipped as a visible failed check and the clearnet answer
+stands.
